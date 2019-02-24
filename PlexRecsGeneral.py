@@ -55,9 +55,6 @@ def getlibrary(library):
     global shows, movies
     items = defaultdict(list)
     media = plex.library.section(MOVIE_LIBRARY_NAME) if library == MOVIE_LIBRARY else plex.library.section(TV_SHOW_LIBRARY_NAME)
-#    for results in media.search():
-#        items['Results'].append(results)
-#    return items
     if library == MOVIE_LIBRARY:
         if not movies:
             for results in media.search():
@@ -76,7 +73,6 @@ def getposter(att, title):
 
 def unwatched(library, username):
     global shows, movies
-    #getlibrary(library)
     allitems = []
     if library == MOVIE_LIBRARY:
         allitems = movies
@@ -92,7 +88,6 @@ def unwatched(library, username):
         user_id = str(ids[names.index(username)])
     except ValueError:
         return "I couldn't find that username. Please check and try again."
-    #print(user_id)
     json_data = json.loads(request("get_history","user_id=" + str(user_id) + "&length=10000").text)
     watched_titles = []
     for watched_item in json_data['response']['data']['data']:
@@ -108,15 +103,11 @@ def unwatched(library, username):
 
 def findrec(library):
     global shows, movies
-    #getlibrary(library)
     suggestion = 0
     if library == MOVIE_LIBRARY:
         suggestion = random.choice(movies['Results'])
     else:
         suggestion = random.choice(shows['Results'])
-    #suggestion = random.choice(items['Results'])
-    #print(suggestion.title)
-    #print(suggestion.ratingKey)
     att = discord.Embed(title=str(suggestion.title), url=PLEX_URL + "/web/index.html#!/server/" + PLEX_SERVER_ID + "/details?key=%2Flibrary%2Fmetadata%2F" + str(suggestion.ratingKey), description="Watch it on " + SERVER_NICKNAME)
     att = getposter(att, str(suggestion.title))
     return "How about " + str(suggestion.title) + "?", att
@@ -126,15 +117,11 @@ async def recommend(message, command):
     library = 0
     plex_username = ""
     if "movie" in command or "show" in command:
-        #print("Movie in command")
         if "new" in command:
-            #print("New in command")
             if not "%" in command:
-                #client.send_message(message.author,"Please try again. Make sure to include \'%\' followed by your Plex username.")
                 return "Please try again. Make sure to include \'%\' followed by your Plex username."
             else:
                 splitted = str(command).split("%")
-                #print(splitted)
                 if "@" in str(splitted[-1:]):
                     plex_username = str(re.findall('[\w\.-]+@[\w\.-]+\.\w+', str(splitted[-1:])))
                 else:
@@ -142,33 +129,22 @@ async def recommend(message, command):
                 plex_username = plex_username.replace("'","")
                 plex_username = plex_username.replace("[","")
                 plex_username = plex_username.replace("]","").strip()
-                #print(plex_username)
                 if plex_username == "":
-                    #client.send_message(message.author,"Please try again. Make sure you include % directly in front of your Plex username (ex. %myusername).")
                     return "Please try again. Make sure you include % directly in front of your Plex username (ex. %myusername).", None
         await client.send_message(message.author,"Looking for a recommendation. This might take a sec, please be patient...")
         if "movie" in command:
             library = MOVIE_LIBRARY
             if "new" in command:
-                #response = unwatched(library, plex_username)
-                #await client.send_message(message.author,str(response))
                 return unwatched(library, plex_username)
             else:
-                #response = findrec(library)
-                #await client.send_message(message.author,str(response))
                 return findrec(library)
         elif "show" in command:
             library = TV_LIBRARY
             if "new" in command:
-                #response = unwatched(library, plex_username)
-                #await client.send_message(message.author,str(response))
                 return unwatched(library, plex_username)
             else:
-                #response = findrec(library)
-                #await client.send_message(message.author,str(response))
                 return findrec(library)
     else:
-        #client.send_message(message.author,"Please ask again, indicating if you want a movie or a TV show.\nIf you only want shows or movies you haven't seen before, include the word \'new\' and \'%<your Plex username>\'.")
         return "Please ask again, indicating if you want a movie or a TV show.\nIf you only want shows or movies you haven't seen before, include the word \'new\' and \'%<your Plex username>\'.", None
 
 @client.event
@@ -185,12 +161,8 @@ async def on_ready():
 async def on_message(message):
     if str(message.channel.type) == 'private':
         if "recommend" in message.content.lower() or "suggest" in message.content.lower():
-            #await client.send_message(message.author,"This may take a second. Please be patient.")
-            #await recommend(message, message.content)
             response, att = await recommend(message, message.content)
             await client.send_message(message.author,str(response))
-            #await client.send_message(message.author,str(recommend(message,message.content)))
-            #att = None
             if att is not None:
                 await client.send_message(message.author,embed=att)
         elif "help" in message.content.lower() or "hello" in message.content.lower() or "hey" in message.content.lower():
