@@ -35,6 +35,7 @@ DISCORD_BOT_TOKEN = "BOT TOKEN GOES HERE"
 
 SERVER_NICKNAME = "YOUR SERVER NICKNAME"
 
+#Right-click on your profile picture -> "Copy ID"
 OWNER_DISCORD_ID = "YOUR DISCORD ID HERE"
 
 client = discord.Client()
