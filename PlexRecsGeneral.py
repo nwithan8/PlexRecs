@@ -35,7 +35,7 @@ DISCORD_BOT_TOKEN = "BOT TOKEN GOES HERE"
 
 SERVER_NICKNAME = "YOUR SERVER NICKNAME"
 
-
+OWNER_DISCORD_ID = "YOUR DISCORD ID HERE"
 
 client = discord.Client()
 
@@ -47,6 +47,11 @@ imdb = Imdb()
 shows = defaultdict(list)
 movies = defaultdict(list)
 
+owner_players = []
+emoji_numbers = [u"1\u20e3",u"2\u20e3",u"3\u20e3",u"4\u20e3",u"5\u20e3"]
+
+def request(cmd, params):
+    return requests.get(TAUTULLI_BASE_URL + "/api/v2?apikey=" + TAUTULLI_API_KEY + "&" + str(params) + "&cmd=" + str(cmd)) if params != None else requests.get(TAUTULLI_BASE_URL + "/api/v2?apikey=" + TAUTULLI_API_KEY + "&cmd=" + str(cmd))
 
 def request(cmd, params):
     return requests.get(TAUTULLI_BASE_URL + "/api/v2?apikey=" + TAUTULLI_API_KEY + "&" + str(params) + "&cmd=" + str(cmd)) if params != None else requests.get(TAUTULLI_BASE_URL + "/api/v2?apikey=" + TAUTULLI_API_KEY + "&cmd=" + str(cmd))
@@ -73,11 +78,15 @@ def getposter(att, title):
 
 def unwatched(library, username):
     global shows, movies
+    #getlibrary(library)
     allitems = []
+    media_type = ""
     if library == MOVIE_LIBRARY:
         allitems = movies
+        media_type = "movie"
     else:
         allitems = shows
+        media_type = "show"
     json_data = json.loads(request("get_users", None).text)
     names = []
     ids = []
@@ -99,27 +108,30 @@ def unwatched(library, username):
     suggestion = random.choice(unwatched_titles)
     att = discord.Embed(title=str(suggestion.title), url=PLEX_URL + "/web/index.html#!/server/" + PLEX_SERVER_ID + "/details?key=%2Flibrary%2Fmetadata%2F" + str(suggestion.ratingKey), description="Watch it on " + SERVER_NICKNAME)
     att = getposter(att, str(suggestion.title))
-    return "How about " + str(suggestion.title) + "?", att
+    return "How about " + str(suggestion.title) + "?", media_type, att, suggestion
 
 def findrec(library):
     global shows, movies
+    #getlibrary(library)
     suggestion = 0
+    media_type = ""
     if library == MOVIE_LIBRARY:
         suggestion = random.choice(movies['Results'])
+        media_type = "movie"
     else:
         suggestion = random.choice(shows['Results'])
+        media_type = "show"
     att = discord.Embed(title=str(suggestion.title), url=PLEX_URL + "/web/index.html#!/server/" + PLEX_SERVER_ID + "/details?key=%2Flibrary%2Fmetadata%2F" + str(suggestion.ratingKey), description="Watch it on " + SERVER_NICKNAME)
     att = getposter(att, str(suggestion.title))
-    return "How about " + str(suggestion.title) + "?", att
+    return "How about " + str(suggestion.title) + "?", media_type, att, suggestion
 
 async def recommend(message, command):
-    #print('Running recommend command...')
     library = 0
     plex_username = ""
     if "movie" in command or "show" in command:
         if "new" in command:
             if not "%" in command:
-                return "Please try again. Make sure to include \'%\' followed by your Plex username."
+                return "Please try again. Make sure to include \'%\' followed by your Plex username.", None, None, None
             else:
                 splitted = str(command).split("%")
                 if "@" in str(splitted[-1:]):
@@ -130,7 +142,7 @@ async def recommend(message, command):
                 plex_username = plex_username.replace("[","")
                 plex_username = plex_username.replace("]","").strip()
                 if plex_username == "":
-                    return "Please try again. Make sure you include % directly in front of your Plex username (ex. %myusername).", None
+                    return "Please try again. Make sure you include % directly in front of your Plex username (ex. %myusername).", None, None, None
         await client.send_message(message.author,"Looking for a recommendation. This might take a sec, please be patient...")
         if "movie" in command:
             library = MOVIE_LIBRARY
@@ -145,8 +157,33 @@ async def recommend(message, command):
             else:
                 return findrec(library)
     else:
-        return "Please ask again, indicating if you want a movie or a TV show.\nIf you only want shows or movies you haven't seen before, include the word \'new\' and \'%<your Plex username>\'.", None
+        return "Please ask again, indicating if you want a movie or a TV show.\nIf you only want shows or movies you haven't seen before, include the word \'new\' and \'%<your Plex username>\'.", None, None, None
 
+def getPlayers(media_type):
+    global owner_players
+    owner_players = []
+    players = plex.clients()
+    if not players:
+        return "No players available. Make sure your app is open. This only works on certain players such as Android TV."
+    else:
+        num = 0
+        player_list = "Available players:"
+        for i in players[:5]:
+            num = num + 1
+            player_list = player_list + "\n" + (str(num) + ": " + str(i.title))
+            owner_players.append(i)
+        return player_list + "\nReact with which player you want to start this " + media_type + " on.", num
+        
+
+async def playIt(reaction, user, suggestion):
+    if (reaction.message.author.id == BOT_ID) and (user.id != BOT_ID):
+        loc = emoji_numbers.index(str(reaction.emoji))
+        print(loc)
+        try:
+            owner_players[loc].goToMedia(suggestion)
+        except:
+            pass
+    
 @client.event
 async def on_ready():
     print('Updating movie library...')
@@ -159,12 +196,22 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
+    global current_owner_suggestion
     if str(message.channel.type) == 'private':
         if "recommend" in message.content.lower() or "suggest" in message.content.lower():
-            response, att = await recommend(message, message.content)
+            response, media_type, att, sugg = await recommend(message, message.content)
             await client.send_message(message.author,str(response))
             if att is not None:
                 await client.send_message(message.author,embed=att)
+            if message.author.id == OWNER_DISCORD_ID:
+                available_players, num_of_players = getPlayers(media_type)
+                players_message = await client.send_message(message.author,available_players)
+                for i in range(num_of_players):
+                    await client.add_reaction(players_message,emoji_numbers[i])
+                reaction, user = await client.wait_for_reaction(emoji=emoji_numbers,message=players_message,user=message.author)
+                if reaction:
+                    await playIt(reaction, user, sugg)
+                
         elif "help" in message.content.lower() or "hello" in message.content.lower() or "hey" in message.content.lower():
             await client.send_message(message.author,"Ask me for a recommendation or a suggestion.")
     else:
