@@ -164,7 +164,7 @@ def getPlayers(media_type):
     owner_players = []
     players = plex.clients()
     if not players:
-        return "No players available. Make sure your app is open. This only works on certain players such as Android TV."
+        return "No players available. Make sure your app is open. This only works on certain players such as Android TV.", 0
     else:
         num = 0
         player_list = "Available players:"
@@ -206,12 +206,12 @@ async def on_message(message):
             if message.author.id == OWNER_DISCORD_ID:
                 available_players, num_of_players = getPlayers(media_type)
                 players_message = await client.send_message(message.author,available_players)
-                for i in range(num_of_players):
-                    await client.add_reaction(players_message,emoji_numbers[i])
-                reaction, user = await client.wait_for_reaction(emoji=emoji_numbers,message=players_message,user=message.author)
-                if reaction:
-                    await playIt(reaction, user, sugg)
-                
+                if num_of_players != 0:
+                    for i in range(num_of_players):
+                        await client.add_reaction(players_message,emoji_numbers[i])
+                    reaction, user = await client.wait_for_reaction(emoji=emoji_numbers,message=players_message,user=message.author)
+                    if reaction:
+                        await playIt(reaction, user, sugg)
         elif "help" in message.content.lower() or "hello" in message.content.lower() or "hey" in message.content.lower():
             await client.send_message(message.author,"Ask me for a recommendation or a suggestion.")
     else:
