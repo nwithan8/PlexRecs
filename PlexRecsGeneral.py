@@ -1,5 +1,5 @@
 #RUN THIS COMMAND TO INSTALL REQUIRED PACKAGES
-#pip install discord PlexAPI imdbpie requests
+#pip3 install discord PlexAPI imdbpie requests
 
 import discord
 from plexapi.server import PlexServer
@@ -18,6 +18,7 @@ import requests
 PLEX_URL = 'http://[IP ADDRESS]:[PORT]'
 PLEX_TOKEN = 'YOUR TOKEN HERE'
 PLEX_SERVER_ID = 'YOUR SERVER ID HERE' #after "/server/" in browser UI URL
+SERVER_NICKNAME = 'YOUR SERVER NICKNAME'
 
 #http://[PMS_IP_Address]:32400/library/sections?X-Plex-Token=YourTokenGoesHere
 #Use the above link to find the number for each library: composite="/library/sections/NUMBER/composite/..."
@@ -26,17 +27,16 @@ TV_LIBRARY = 2 #Might be different for your Plex library
 MOVIE_LIBRARY_NAME=''
 TV_SHOW_LIBRARY_NAME=''
 
-TAUTULLI_BASE_URL = "http://[IP ADDRESS]:[PORT]"
+TAUTULLI_BASE_URL = 'http://[IP ADDRESS]:[PORT]'
 TAUTULLI_API_KEY = 'YOUR API KEY HERE'
 
 #Right-click on your Discord bot's profile picture -> "Copy ID"
-BOT_ID = "BOT ID GOES HERE"
-DISCORD_BOT_TOKEN = "BOT TOKEN GOES HERE"
-
-SERVER_NICKNAME = "YOUR SERVER NICKNAME"
+BOT_ID = 'BOT ID GOES HERE'
+DISCORD_BOT_TOKEN = 'BOT TOKEN GOES HERE'
+BOT_NAME = 'BOT NAME GOES HERE'
 
 #Right-click on your profile picture -> "Copy ID"
-OWNER_DISCORD_ID = "YOUR DISCORD ID HERE"
+OWNER_DISCORD_ID = 'YOUR DISCORD ID HERE'
 
 client = discord.Client()
 
@@ -50,9 +50,6 @@ movies = defaultdict(list)
 
 owner_players = []
 emoji_numbers = [u"1\u20e3",u"2\u20e3",u"3\u20e3",u"4\u20e3",u"5\u20e3"]
-
-def request(cmd, params):
-    return requests.get(TAUTULLI_BASE_URL + "/api/v2?apikey=" + TAUTULLI_API_KEY + "&" + str(params) + "&cmd=" + str(cmd)) if params != None else requests.get(TAUTULLI_BASE_URL + "/api/v2?apikey=" + TAUTULLI_API_KEY + "&cmd=" + str(cmd))
 
 def request(cmd, params):
     return requests.get(TAUTULLI_BASE_URL + "/api/v2?apikey=" + TAUTULLI_API_KEY + "&" + str(params) + "&cmd=" + str(cmd)) if params != None else requests.get(TAUTULLI_BASE_URL + "/api/v2?apikey=" + TAUTULLI_API_KEY + "&cmd=" + str(cmd))
@@ -97,7 +94,7 @@ def unwatched(library, username):
     try:
         user_id = str(ids[names.index(username)])
     except ValueError:
-        return "I couldn't find that username. Please check and try again."
+        return r"I couldn't find that username. Please check and try again."
     json_data = json.loads(request("get_history","user_id=" + str(user_id) + "&length=10000").text)
     watched_titles = []
     for watched_item in json_data['response']['data']['data']:
@@ -129,36 +126,37 @@ def findrec(library):
 async def recommend(message, command):
     library = 0
     plex_username = ""
-    if "movie" in command or "show" in command:
-        if "new" in command:
-            if not "%" in command:
-                return "Please try again. Make sure to include \'%\' followed by your Plex username.", None, None, None
-            else:
-                splitted = str(command).split("%")
-                if "@" in str(splitted[-1:]):
-                    plex_username = str(re.findall('[\w\.-]+@[\w\.-]+\.\w+', str(splitted[-1:])))
+    if not BOT_NAME in str(message.author):
+        if "movie" in command.lower() or "tv" in command.lower() or "show" in command.lower():
+            if "new" in command.lower():
+                if not "%" in command:
+                    return "Please try again. Make sure to include \'%\' followed by your Plex username.", None, None, None
                 else:
-                    plex_username = str(re.findall('[%]\w+', command))[3:]
-                plex_username = plex_username.replace("'","")
-                plex_username = plex_username.replace("[","")
-                plex_username = plex_username.replace("]","").strip()
-                if plex_username == "":
-                    return "Please try again. Make sure you include % directly in front of your Plex username (ex. %myusername).", None, None, None
-        await client.send_message(message.author,"Looking for a recommendation. This might take a sec, please be patient...")
-        if "movie" in command:
-            library = MOVIE_LIBRARY
-            if "new" in command:
-                return unwatched(library, plex_username)
-            else:
-                return findrec(library)
-        elif "show" in command:
-            library = TV_LIBRARY
-            if "new" in command:
-                return unwatched(library, plex_username)
-            else:
-                return findrec(library)
-    else:
-        return "Please ask again, indicating if you want a movie or a TV show.\nIf you only want shows or movies you haven't seen before, include the word \'new\' and \'%<your Plex username>\'.", None, None, None
+                    splitted = str(command).split("%")
+                    if "@" in str(splitted[-1:]):
+                        plex_username = str(re.findall('[\w\.-]+@[\w\.-]+\.\w+', str(splitted[-1:])))
+                    else:
+                        plex_username = str(re.findall('[%]\w+', command))[3:]
+                    plex_username = plex_username.replace(r"'","")
+                    plex_username = plex_username.replace("[","")
+                    plex_username = plex_username.replace("]","").strip()
+                    if plex_username == "":
+                        return r"Please try again. Make sure you include % directly in front of your Plex username (ex. %myusername).", None, None, None
+            await message.channel.send("Looking for a recommendation. This might take a sec, please be patient...")
+            if "movie" in command:
+                library = MOVIE_LIBRARY
+                if "new" in command.lower():
+                    return unwatched(library, plex_username)
+                else:
+                    return findrec(library)
+            elif "tv" in command.lower() or "show" in command.lower():
+                library = TV_LIBRARY
+                if "new" in command.lower():
+                    return unwatched(library, plex_username)
+                else:
+                    return findrec(library)
+        else:
+            return "Please ask again, indicating if you want a movie or a TV show.\nIf you only want shows or movies you haven\'t seen before, include the word \'new\' and \'%<your Plex username>\'.", None, None, None
 
 def getPlayers(media_type):
     global owner_players
@@ -192,32 +190,34 @@ async def on_ready():
     print('Updating TV library...')
     getlibrary(TV_LIBRARY)
     print('Ready to give recommendations!')
-    game=discord.Game(name="PM for recommendation or suggestion.")
-    await client.change_presence(game=game)
+    game=discord.Game(name="PM for recommendation or suggestion.", type=0)
+    await client.change_presence(activity=game)
 
 @client.event
 async def on_message(message):
     global current_owner_suggestion
-    if str(message.channel.type) == 'private':
+    if "Direct Message" in str(message.channel):
         if "recommend" in message.content.lower() or "suggest" in message.content.lower():
             response, media_type, att, sugg = await recommend(message, message.content)
-            await client.send_message(message.author,str(response))
+            await message.channel.send(str(response))
             if att is not None:
-                await client.send_message(message.author,embed=att)
+                await message.channel.send(embed=att)
             if message.author.id == OWNER_DISCORD_ID:
                 available_players, num_of_players = getPlayers(media_type)
-                players_message = await client.send_message(message.author,available_players)
+                players_message = await message.channel.send(available_players)
                 if num_of_players != 0:
                     for i in range(num_of_players):
-                        await client.add_reaction(players_message,emoji_numbers[i])
+                        await client.add_reaction(emoji_numbers[i])
                     reaction, user = await client.wait_for_reaction(emoji=emoji_numbers,message=players_message,user=message.author)
                     if reaction:
                         await playIt(reaction, user, sugg)
+                else:
+                    await message.channel.send(f"Sorry, you have no available players to start playing from. Make sure you're on the same network as {SERVER_NICKNAME}")
         elif "help" in message.content.lower() or "hello" in message.content.lower() or "hey" in message.content.lower():
-            await client.send_message(message.author,"Ask me for a recommendation or a suggestion.")
+            await message.channel.send("Ask me for a recommendation or a suggestion.")
     else:
         for i in message.mentions:
             if BOT_ID == i.id:
-                await client.send_message(message.author,"Send me a private message for a movie or TV show recommendation.")
+                await message.channel.send("Send me a private message for a movie or TV show recommendation.")
 
 client.run(DISCORD_BOT_TOKEN)
