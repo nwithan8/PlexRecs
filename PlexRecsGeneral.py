@@ -33,7 +33,6 @@ TAUTULLI_API_KEY = 'YOUR API KEY HERE'
 #Right-click on your Discord bot's profile picture -> "Copy ID"
 BOT_ID = 'BOT ID GOES HERE'
 DISCORD_BOT_TOKEN = 'BOT TOKEN GOES HERE'
-BOT_NAME = 'BOT NAME GOES HERE'
 
 #Right-click on your profile picture -> "Copy ID"
 OWNER_DISCORD_ID = 'YOUR DISCORD ID HERE'
@@ -126,7 +125,7 @@ def findrec(library):
 async def recommend(message):
     library = 0
     plex_username = ""
-    if not BOT_NAME in str(message.author):
+    if str(message.author.id) != str(BOT_ID):
         if "movie" in message.content.lower() or "tv" in message.content.lower() or "show" in message.content.lower():
             if "new" in message.content.lower():
                 if not "%" in message.content:
@@ -175,7 +174,7 @@ def getPlayers(media_type):
         
 
 async def playIt(reaction, user, suggestion):
-    if str(reaction.message.author.id) == str(BOT_ID) and str(user.id) == str(OWNER_DISCORD_ID):
+    if str(reaction.message.author.id) == str(BOT_ID) and str(user.id) != str(BOT_ID):
         loc = emoji_numbers.index(str(reaction.emoji))
         try:
             owner_players[loc].goToMedia(suggestion)
@@ -195,26 +194,27 @@ async def on_ready():
 @client.event
 async def on_message(message):
     global current_owner_suggestion
-    if "recommend" in message.content.lower() or "suggest" in message.content.lower():
-        response, media_type, att, sugg = await recommend(message)
-        if att is not None:
-            await message.channel.send(response, embed=att)
-            if str(message.author.id) == str(OWNER_DISCORD_ID):
-                available_players, num_of_players = getPlayers(media_type)
-                players_message = await message.channel.send(available_players)
-                if num_of_players != 0:
-                    for i in range(num_of_players):
-                        await players_message.add_reaction(emoji_numbers[i])
-                    def check(reaction, user):
-                        return user == message.author
-                    reaction, user = await client.wait_for('reaction_add', check=check)
-                    if reaction:
-                        await playIt(reaction, user, sugg)
-                else:
-                    await message.channel.send(f"Sorry, you have no available players to start playing from. Make sure you're on the same network as {SERVER_NICKNAME}")
-        else:
-            await message.channel.send(response)
-    elif "help" in message.content.lower() or "hello" in message.content.lower() or "hey" in message.content.lower():
-        await message.channel.send("Ask me for a recommendation or a suggestion.")
+    if str(BOT_ID) in str(message.mentions):
+        if "recommend" in message.content.lower() or "suggest" in message.content.lower():
+            response, media_type, att, sugg = await recommend(message)
+            if att is not None:
+                await message.channel.send(response, embed=att)
+                if str(message.author.id) == str(OWNER_DISCORD_ID):
+                    available_players, num_of_players = getPlayers(media_type)
+                    players_message = await message.channel.send(available_players)
+                    if num_of_players != 0:
+                        for i in range(num_of_players):
+                            await players_message.add_reaction(emoji_numbers[i])
+                        def check(reaction, user):
+                            return user == message.author
+                        reaction, user = await client.wait_for('reaction_add', check=check)
+                        if reaction:
+                            await playIt(reaction, user, sugg)
+                    else:
+                        await message.channel.send(f"Sorry, you have no available players to start playing from. Make sure you're on the same network as {SERVER_NICKNAME}")
+            else:
+                await message.channel.send(response)
+        elif "help" in message.content.lower() or "hello" in message.content.lower() or "hey" in message.content.lower():
+            await message.channel.send("Ask me for a recommendation or a suggestion.")
 
 client.run(DISCORD_BOT_TOKEN)
