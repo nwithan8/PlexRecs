@@ -10,16 +10,12 @@ HOW TO MAKE A DISCORD BOT: https://discordpy.readthedocs.io/en/rewrite/discord.h
 
 Run the pip command at the top of the PlexRecs.py file to install the required Python packages:
 
-	pip install discord PlexAPI imdbpie requests
+	pip3 install discord PlexAPI imdbpie requests
 
 # Usage
-Run the script wuth the following command:
-		
-	python PlexRecs.py
-OR
+Run the script with the following command:
 	
 	python3 PlexRecs.py
-(Bot works on Python 3.6.5rc1, does not work on Python 3.7+)
 
 Once the bot is up and running, simply send a private message to the bot account, mentioning the word "recommend" or "suggest" to get started. The bot will also provide assistance for those mentioning "help","hello" or "hey" in a private message.
 
