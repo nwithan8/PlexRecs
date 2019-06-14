@@ -93,8 +93,8 @@ def unwatched(library, username):
         ids.append(user['user_id'])
     try:
         user_id = str(ids[names.index(username)])
-    except ValueError:
-        return r"I couldn't find that username. Please check and try again."
+    except:
+        return "I couldn\'t find that username. Please check and try again.", None, None, None
     json_data = json.loads(request("get_history","user_id=" + str(user_id) + "&length=10000").text)
     watched_titles = []
     for watched_item in json_data['response']['data']['data']:
@@ -104,7 +104,7 @@ def unwatched(library, username):
         if not atitle.title in watched_titles:
             unwatched_titles.append(atitle)
     suggestion = random.choice(unwatched_titles)
-    att = discord.Embed(title=str(suggestion.title), url=PLEX_URL + "/web/index.html#!/server/" + PLEX_SERVER_ID + "/details?key=%2Flibrary%2Fmetadata%2F" + str(suggestion.ratingKey), description="Watch it on " + SERVER_NICKNAME)
+    att = discord.Embed(title=str(suggestion.title), url="https://app.plex.tv/desktop#!/server/" + PLEX_SERVER_ID + "/details?key=%2Flibrary%2Fmetadata%2F" + str(suggestion.ratingKey), description="Watch it on " + SERVER_NICKNAME)
     att = getposter(att, str(suggestion.title))
     return "How about " + str(suggestion.title) + "?", media_type, att, suggestion
 
@@ -119,39 +119,39 @@ def findrec(library):
     else:
         suggestion = random.choice(shows['Results'])
         media_type = "show"
-    att = discord.Embed(title=str(suggestion.title), url=PLEX_URL + "/web/index.html#!/server/" + PLEX_SERVER_ID + "/details?key=%2Flibrary%2Fmetadata%2F" + str(suggestion.ratingKey), description="Watch it on " + SERVER_NICKNAME)
+    att = discord.Embed(title=str(suggestion.title), url="https://app.plex.tv/desktop#!/server/" + PLEX_SERVER_ID + "/details?key=%2Flibrary%2Fmetadata%2F" + str(suggestion.ratingKey), description="Watch it on " + SERVER_NICKNAME)
     att = getposter(att, str(suggestion.title))
     return "How about " + str(suggestion.title) + "?", media_type, att, suggestion
 
-async def recommend(message, command):
+async def recommend(message):
     library = 0
     plex_username = ""
     if not BOT_NAME in str(message.author):
-        if "movie" in command.lower() or "tv" in command.lower() or "show" in command.lower():
-            if "new" in command.lower():
-                if not "%" in command:
+        if "movie" in message.content.lower() or "tv" in message.content.lower() or "show" in message.content.lower():
+            if "new" in message.content.lower():
+                if not "%" in message.content:
                     return "Please try again. Make sure to include \'%\' followed by your Plex username.", None, None, None
                 else:
-                    splitted = str(command).split("%")
+                    splitted = str(message.content).split("%")
                     if "@" in str(splitted[-1:]):
                         plex_username = str(re.findall('[\w\.-]+@[\w\.-]+\.\w+', str(splitted[-1:])))
                     else:
-                        plex_username = str(re.findall('[%]\w+', command))[3:]
+                        plex_username = str(re.findall('[%]\w+', message.content))[3:]
                     plex_username = plex_username.replace(r"'","")
                     plex_username = plex_username.replace("[","")
                     plex_username = plex_username.replace("]","").strip()
                     if plex_username == "":
-                        return r"Please try again. Make sure you include % directly in front of your Plex username (ex. %myusername).", None, None, None
+                        return "Please try again. Make sure you include '%' directly in front of your Plex username (ex. %myusername).", None, None, None
             await message.channel.send("Looking for a recommendation. This might take a sec, please be patient...")
-            if "movie" in command:
+            if "movie" in message.content.lower():
                 library = MOVIE_LIBRARY
-                if "new" in command.lower():
+                if "new" in message.content.lower():
                     return unwatched(library, plex_username)
                 else:
                     return findrec(library)
-            elif "tv" in command.lower() or "show" in command.lower():
+            elif "tv" in message.content.lower() or "show" in message.content.lower():
                 library = TV_LIBRARY
-                if "new" in command.lower():
+                if "new" in message.content.lower():
                     return unwatched(library, plex_username)
                 else:
                     return findrec(library)
@@ -171,13 +171,12 @@ def getPlayers(media_type):
             num = num + 1
             player_list = player_list + "\n" + (str(num) + ": " + str(i.title))
             owner_players.append(i)
-        return player_list + "\nReact with which player you want to start this " + media_type + " on.", num
+        return player_list + "\nReact with which player you want to start this " + str(media_type) + " on.", num
         
 
 async def playIt(reaction, user, suggestion):
-    if (reaction.message.author.id == BOT_ID) and (user.id != BOT_ID):
+    if str(reaction.message.author.id) == str(BOT_ID) and str(user.id) == str(OWNER_DISCORD_ID):
         loc = emoji_numbers.index(str(reaction.emoji))
-        print(loc)
         try:
             owner_players[loc].goToMedia(suggestion)
         except:
@@ -190,34 +189,32 @@ async def on_ready():
     print('Updating TV library...')
     getlibrary(TV_LIBRARY)
     print('Ready to give recommendations!')
-    game=discord.Game(name="PM for recommendation or suggestion.", type=0)
+    game=discord.Game(name="Ask me for a recommendation.", type=0)
     await client.change_presence(activity=game)
 
 @client.event
 async def on_message(message):
     global current_owner_suggestion
-    if "Direct Message" in str(message.channel):
-        if "recommend" in message.content.lower() or "suggest" in message.content.lower():
-            response, media_type, att, sugg = await recommend(message, message.content)
-            await message.channel.send(str(response))
-            if att is not None:
-                await message.channel.send(embed=att)
-            if message.author.id == OWNER_DISCORD_ID:
+    if "recommend" in message.content.lower() or "suggest" in message.content.lower():
+        response, media_type, att, sugg = await recommend(message)
+        if att is not None:
+            await message.channel.send(response, embed=att)
+            if str(message.author.id) == str(OWNER_DISCORD_ID):
                 available_players, num_of_players = getPlayers(media_type)
                 players_message = await message.channel.send(available_players)
                 if num_of_players != 0:
                     for i in range(num_of_players):
-                        await client.add_reaction(emoji_numbers[i])
-                    reaction, user = await client.wait_for_reaction(emoji=emoji_numbers,message=players_message,user=message.author)
+                        await players_message.add_reaction(emoji_numbers[i])
+                    def check(reaction, user):
+                        return user == message.author
+                    reaction, user = await client.wait_for('reaction_add', check=check)
                     if reaction:
                         await playIt(reaction, user, sugg)
                 else:
                     await message.channel.send(f"Sorry, you have no available players to start playing from. Make sure you're on the same network as {SERVER_NICKNAME}")
-        elif "help" in message.content.lower() or "hello" in message.content.lower() or "hey" in message.content.lower():
-            await message.channel.send("Ask me for a recommendation or a suggestion.")
-    else:
-        for i in message.mentions:
-            if BOT_ID == i.id:
-                await message.channel.send("Send me a private message for a movie or TV show recommendation.")
+        else:
+            await message.channel.send(response)
+    elif "help" in message.content.lower() or "hello" in message.content.lower() or "hey" in message.content.lower():
+        await message.channel.send("Ask me for a recommendation or a suggestion.")
 
 client.run(DISCORD_BOT_TOKEN)
