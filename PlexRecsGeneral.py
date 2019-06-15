@@ -162,7 +162,7 @@ def getPlayers(media_type):
     owner_players = []
     players = plex.clients()
     if not players:
-        return "No players available. Make sure your app is open. This only works on certain players such as Android TV.", 0
+        return f"Sorry, you have no available players to start playing from. Make sure your app is open and on the same network as {SERVER_NICKNAME}.", 0
     else:
         num = 0
         player_list = "Available players:"
@@ -188,13 +188,13 @@ async def on_ready():
     print('Updating TV library...')
     getlibrary(TV_LIBRARY)
     print('Ready to give recommendations!')
-    game=discord.Game(name="Ask me for a recommendation.", type=0)
+    game=discord.Game(name="Ask me for a recommendation.")
     await client.change_presence(activity=game)
 
 @client.event
 async def on_message(message):
     global current_owner_suggestion
-    if str(BOT_ID) in str(message.mentions):
+    if (str(BOT_ID) in str(message.mentions)) or ("Direct Message" in str(message.channel) and str(message.author.id) != str(BOT_ID)):
         if "recommend" in message.content.lower() or "suggest" in message.content.lower():
             response, media_type, att, sugg = await recommend(message)
             if att is not None:
@@ -210,8 +210,6 @@ async def on_message(message):
                         reaction, user = await client.wait_for('reaction_add', check=check)
                         if reaction:
                             await playIt(reaction, user, sugg)
-                    else:
-                        await message.channel.send(f"Sorry, you have no available players to start playing from. Make sure you're on the same network as {SERVER_NICKNAME}")
             else:
                 await message.channel.send(response)
         elif "help" in message.content.lower() or "hello" in message.content.lower() or "hey" in message.content.lower():
