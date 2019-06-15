@@ -1,5 +1,5 @@
 #RUN THIS COMMAND TO INSTALL REQUIRED PACKAGES
-#pip3 install discord PlexAPI imdbpie requests
+#pip3 install discord PlexAPI imdbpie requests progress
 
 import discord
 from plexapi.server import PlexServer
@@ -12,6 +12,7 @@ from imdbpie import ImdbFacade
 import re
 import json
 import requests
+from progress.bar import Bar
 
 
 #EDIT THESE VALUES
@@ -37,6 +38,7 @@ DISCORD_BOT_TOKEN = 'BOT TOKEN GOES HERE'
 #Right-click on your profile picture -> "Copy ID"
 OWNER_DISCORD_ID = 'YOUR DISCORD ID HERE'
 
+
 client = discord.Client()
 
 plex = PlexServer(PLEX_URL, PLEX_TOKEN)
@@ -59,12 +61,22 @@ def getlibrary(library):
     media = plex.library.section(MOVIE_LIBRARY_NAME) if library == MOVIE_LIBRARY else plex.library.section(TV_SHOW_LIBRARY_NAME)
     if library == MOVIE_LIBRARY:
         if not movies:
+            json_data = json.loads(request("get_library", "section_id=" + str(MOVIE_LIBRARY)).text)
+            count = json_data['response']['data']['count']
+            bar = Bar('Loading movies', max=int(count))
             for results in media.search():
-                movies['Results'].append(results)
+                movies['Results'].append([results.title, results.year])
+                bar.next()
+            bar.finish()
     else:
         if not shows:
+            json_data = json.loads(request("get_library", "section_id=" + str(TV_LIBRARY)).text)
+            count = json_data['response']['data']['count']
+            bar = Bar('Loading TV shows', max=int(count))
             for results in media.search():
-                shows['Results'].append(results)
+                shows['Results'].append([results.title, results.year])
+                bar.next()
+            bar.finish()
 
 def getposter(att, title):
     try:
@@ -75,14 +87,13 @@ def getposter(att, title):
 
 def unwatched(library, username):
     global shows, movies
-    #getlibrary(library)
-    allitems = []
     media_type = ""
+    library_name = ""
     if library == MOVIE_LIBRARY:
-        allitems = movies
+        library_name = MOVIE_LIBRARY_NAME
         media_type = "movie"
     else:
-        allitems = shows
+        library_name = TV_SHOW_LIBRARY_NAME
         media_type = "show"
     json_data = json.loads(request("get_users", None).text)
     names = []
@@ -99,24 +110,35 @@ def unwatched(library, username):
     for watched_item in json_data['response']['data']['data']:
         watched_titles.append(watched_item["full_title"])
     unwatched_titles = []
-    for atitle in allitems['Results']:
-        if not atitle.title in watched_titles:
-            unwatched_titles.append(atitle)
-    suggestion = random.choice(unwatched_titles)
+    for media in (movies['Results'] if media_type == "movie" else shows['Results']):
+        if not media[0] in watched_titles:
+            unwatched_titles.append(media)
+    rand = random.choice(unwatched_titles)
+    try:
+        suggestion = plex.library.section(library_name).search(title=rand[0],year=rand[1])[0]
+    except:
+        return "Oops, something went wrong. Want to try again?", None, None, None
     att = discord.Embed(title=str(suggestion.title), url="https://app.plex.tv/desktop#!/server/" + PLEX_SERVER_ID + "/details?key=%2Flibrary%2Fmetadata%2F" + str(suggestion.ratingKey), description="Watch it on " + SERVER_NICKNAME)
     att = getposter(att, str(suggestion.title))
     return "How about " + str(suggestion.title) + "?", media_type, att, suggestion
 
 def findrec(library):
     global shows, movies
-    #getlibrary(library)
     suggestion = 0
     media_type = ""
     if library == MOVIE_LIBRARY:
-        suggestion = random.choice(movies['Results'])
+        rand = random.choice(movies['Results'])
+        try:
+            suggestion = plex.library.section(MOVIE_LIBRARY_NAME).search(title=rand[0],year=rand[1])[0]
+        except:
+            return "Oops, something went wrong. Want to try again?", None, None, None
         media_type = "movie"
     else:
-        suggestion = random.choice(shows['Results'])
+        rand = random.choice(shows['Results'])
+        try:
+            suggestion = plex.library.section(TV_SHOW_LIBRARY_NAME).search(title=rand[0],year=rand[1])[0]
+        except:
+            return "Oops, something went wrong. Want to try again?", None, None, None
         media_type = "show"
     att = discord.Embed(title=str(suggestion.title), url="https://app.plex.tv/desktop#!/server/" + PLEX_SERVER_ID + "/details?key=%2Flibrary%2Fmetadata%2F" + str(suggestion.ratingKey), description="Watch it on " + SERVER_NICKNAME)
     att = getposter(att, str(suggestion.title))
@@ -183,9 +205,7 @@ async def playIt(reaction, user, suggestion):
     
 @client.event
 async def on_ready():
-    print('Updating movie library...')
     getlibrary(MOVIE_LIBRARY)
-    print('Updating TV library...')
     getlibrary(TV_LIBRARY)
     print('Ready to give recommendations!')
     game=discord.Game(name="Ask me for a recommendation.")
