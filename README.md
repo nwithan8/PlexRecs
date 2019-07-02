@@ -23,6 +23,6 @@ Once the bot is up and running, simply send a private message to the bot account
 Users can also select which active Plex player to beam the content to, in case you want to watch it on another platform. This feature is exclusive to the bot owner; since the script uses the owner's Plex account specifically for retrieving libraries and playing media, this can only be done on devices registered to the user's personal account. As it stands right now, there is no foreseeable way to circumvent this. (That's probably for the best. Don't want someone being able to remotely control another person's Plex).
 
 TO COME:
--Music library option
--Multiple library support
--Simplier "Try Again"
+- Music library option
+- Multiple library support
+- Simplier "Try Again"
