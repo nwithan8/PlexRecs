@@ -1,12 +1,10 @@
 import asyncio
 import discord
 from discord.ext import commands, tasks
-from discord.utils import get
 import credentials
 from plexapi.server import PlexServer
 import requests
 import json
-import re
 from imdbpie import Imdb, ImdbFacade
 import random
 from progress.bar import Bar
@@ -25,7 +23,7 @@ emoji_numbers = [u"1\u20e3", u"2\u20e3", u"3\u20e3", u"4\u20e3", u"5\u20e3"]
 
 
 def request(cmd, params):
-    url = '{base}/api/v2?apikey={key}&cmd={cmd}'.format(base=credentials.TAUTULLI_API_KEY,
+    url = '{base}/api/v2?apikey={key}&cmd={cmd}'.format(base=credentials.TAUTULLI_BASE_URL,
                                                         key=credentials.TAUTULLI_API_KEY, cmd=cmd)
     if params:
         url = '{base}/api/v2?apikey={key}&{params}&cmd={cmd}'.format(base=credentials.TAUTULLI_BASE_URL,
@@ -41,37 +39,45 @@ def cleanLibraries():
     ARTISTS.clear
 
 
+class SmallMediaItem:
+    def __init__(self, title, year, ratingKey, librarySectionID):
+        self.title = title
+        self.year = year
+        self.ratingKey = ratingKey
+        self.librarySectionID = librarySectionID
+
+
 def makeLibrary(libraryNumber):
     try:
         global MOVIES, SHOWS, ARTISTS
-        librarySection = plex.library.sectionByID(libraryNumber)
+        librarySection = plex.library.sectionByID(str(libraryNumber))
         json_data = request("get_library", "section_id={}".format(libraryNumber))
         count = json_data['response']['data']['count']
         if libraryNumber in credentials.MOVIE_LIBRARIES and not MOVIES:
             bar = Bar('Loading movies', max=int(count))
             for item in librarySection.all():
-                MOVIES.append([item.title, item.year])
+                MOVIES.append(SmallMediaItem(item.title, item.year, item.ratingKey, item.librarySectionID))
                 bar.next()
             bar.finish()
             return True
         elif libraryNumber in credentials.TV_LIBRARIES and not SHOWS:
             bar = Bar('Loading TV shows', max=int(count))
             for item in librarySection.all():
-                SHOWS.append([item.title, item.year])
+                SHOWS.append(SmallMediaItem(item.title, item.year, item.ratingKey, item.librarySectionID))
                 bar.next()
             bar.finish()
             return True
-        elif libraryNumber in credentials.MOVIE_LIBRARIES and not ARTISTS:
+        elif libraryNumber in credentials.MUSIC_LIBRARIES and not ARTISTS:
             bar = Bar('Loading musical artists', max=int(count))
             for item in librarySection.all():
-                ARTISTS.append([item.title, item.year])
+                ARTISTS.append(SmallMediaItem(item.title, None, item.ratingKey, item.librarySectionID))
                 bar.next()
             bar.finish()
             return True
         else:
             return False
     except Exception as e:
-        print('Error grabbing libraries: {}'.format(e))
+        print('Error in makeLibrary: {}'.format(e))
         return False
 
 
@@ -80,35 +86,40 @@ def getPoster(embed, title):
         embed.set_image(url=str(imdbf.get_title(imdb.search_for_title(title)[0]['imdb_id']).image.url))
         return embed
     except Exception as e:
-        print("Error getting poster: {}".format(e))
+        print("Error in getPoster: {}".format(e))
         return embed
 
 
 def makeEmbed(mediaItem):
     embed = discord.Embed(title=mediaItem.title,
                           url='{base}/web/index.html#!/server/{id}/details?key=%2Flibrary%2Fmetadata%2F{ratingKey}'.format(
-                              base=credentials.PLEX_URL, id=credentials.PLEX_SERVER_ID, ratingKey=mediaItem.ratingKey),
-                          description="Watch it on {}".format(credentials.PLEX_SERVER_NAME))
-    embed = getPoster(embed, mediaItem.title)
+                              base=credentials.PLEX_URL, id=credentials.PLEX_SERVER_ID, ratingKey=mediaItem.ratingKey,
+                              description="Watch it on {}".format(credentials.PLEX_SERVER_NAME)))
+    if int(mediaItem.librarySectionID) not in credentials.MUSIC_LIBRARIES:
+        embed = getPoster(embed, mediaItem.title)
     return embed
 
 
 def getHistory(username, sectionIDs):
-    user_id = ""
-    users = request('get_users', None)
-    for user in users['response']['data']:
-        if user['username'] == username:
-            user_id = user['user_id']
-            break
-    if not user_id:
-        print("I couldn't find that username. Please check and try again.")
+    try:
+        user_id = ""
+        users = request('get_users', None)
+        for user in users['response']['data']:
+            if user['username'] == username:
+                user_id = user['user_id']
+                break
+        if not user_id:
+            print("I couldn't find that username. Please check and try again.")
+            return False
+        watched_titles = []
+        for sectionID in sectionIDs:
+            history = request('get_history', 'section_id={}&user_id={}&length=10000'.format(str(sectionID), user_id))
+            for watched_item in history['response']['data']['data']:
+                watched_titles.append(watched_item['full_title'])
+        return watched_titles
+    except Exception as e:
+        print("Error in getHistory: {}".format(e))
         return False
-    watched_titles = []
-    for sectionID in sectionIDs:
-        history = request('get_history', 'section_id={}&user_id={}&length=10000'.format(str(sectionID), user_id))
-        for watched_item in history['response']['data']['data']:
-            watched_titles.append(watched_item['full_title'])
-    return watched_titles
 
 
 def pickUnwatched(history, mediaList):
@@ -116,7 +127,7 @@ def pickUnwatched(history, mediaList):
     Keep picking until something is unwatched
     :param history:
     :param mediaList: Movies list, Shows list or Artists list
-    :return:
+    :return: SmallMediaItem object
     """
     if not history:
         return False
@@ -165,8 +176,10 @@ def makeRecommendation(mediaType, unwatched, PlexUsername):
         recommendation = findRec(PlexUsername, mediaType, True)
         if not recommendation:
             return "I couldn't find that Plex username"
-        embed = makeEmbed(recommendation)
-        return "How about {}?".format(recommendation.title), embed, recommendation
+    else:
+        recommendation = findRec(None, mediaType, False)
+    embed = makeEmbed(recommendation)
+    return "How about {}?".format(recommendation.title), embed, recommendation
 
 
 def getPlayers(mediaType):
@@ -174,7 +187,7 @@ def getPlayers(mediaType):
     owner_players = []
     players = plex.clients()
     if not players:
-        return False
+        return False, 0
     num = 0
     players_list = ""
     for player in players[:5]:
@@ -184,11 +197,19 @@ def getPlayers(mediaType):
     return '{}\nReact with which player you want to start this {} on.'.format(players_list, mediaType), num
 
 
+def getFullMediaItem(mediaItem):
+    librarySection = plex.library.sectionByID(mediaItem.librarySectionID)
+    for item in librarySection.search(title=mediaItem.title, year=[mediaItem.year]):
+        if item.ratingKey == mediaItem.ratingKey:
+            return item
+    return None
+
+
 def playMedia(playerNumber, mediaItem):
     owner_players[playerNumber].goToMedia(mediaItem)
 
 
-class PlexRecs(commands.Cogs):
+class PlexRecs(commands.Cog):
 
     @tasks.loop(minutes=60.0)  # update library every hour
     async def makeLibraries(self):
@@ -211,29 +232,35 @@ class PlexRecs(commands.Cogs):
             if mediaType.lower() not in ['movie', 'show', 'artist']:
                 await ctx.send("Please try again, indicating either 'movie', 'show', or 'artist'")
             else:
-                await ctx.send("Looking for a {}...".format(mediaType))
+                holdMessage = await ctx.send("Looking for a{} {}...".format("n" if (mediaType[0] in ['a','e','i','o','u']) else "", mediaType))
                 async with ctx.typing():
                     response, embed, mediaItem = makeRecommendation(mediaType, False, None)
-                    if embed is not None:
-                        await ctx.send(response, embed=embed)
-                    else:
-                        await ctx.send(response)
-                    if ctx.message.author.id == credentials.OWNER_DISCORD_ID:
+                await holdMessage.delete()
+                if embed is not None:
+                    await ctx.send(response, embed=embed)
+                else:
+                    await ctx.send(response)
+                if str(ctx.message.author.id) == str(credentials.OWNER_DISCORD_ID):
+                    response, numberOfPlayers = getPlayers(mediaType)
+                    if response:
                         askAboutPlayer = True
                         while askAboutPlayer:
                             try:
                                 def check(react, reactUser, numPlayers):
                                     return str(react.emoji) in emoji_numbers[
                                                                :numberOfPlayers] and reactUser.id == credentials.OWNER_DISCORD_ID
-
-                                response, numberOfPlayers = getPlayers()
                                 playerQuestion = await ctx.send(response)
                                 for i in range(0, numberOfPlayers - 1):
                                     await playerQuestion.add_reaction(emoji_numbers[i])
                                 reaction, user = await self.bot.wait_fo('reaction_add', timeout=60.0, check=check)
                                 if reaction:
                                     playerNumber = emoji_numbers.index(str(reaction.emoji))
-                                    playMedia(playerNumber, mediaItem)
+                                    mediaItem = getFullMediaItem(mediaItem)
+                                    if mediaItem:
+                                        playMedia(playerNumber, mediaItem)
+                                    else:
+                                        await ctx.send(
+                                            "Sorry, something went wrong while loading that {}.".format(mediaType))
                             except asyncio.TimeoutError:
                                 await playerQuestion.delete()
                                 askAboutPlayer = False
@@ -261,29 +288,35 @@ class PlexRecs(commands.Cogs):
         if not mediaType:
             await ctx.send("Please try again, indicating either 'movie', 'show', or 'artist'")
         else:
-            await ctx.send("Looking for a new {}...".format(mediaType))
+            holdMessage = await ctx.send("Looking for a new {}...".format(mediaType))
             async with ctx.typing():
                 response, embed, mediaItem = makeRecommendation(mediaType, True, PlexUsername)
-                if embed is not None:
-                    await ctx.send(response, embed=embed)
-                else:
-                    await ctx.send(response)
-                if ctx.message.author.id == credentials.OWNER_DISCORD_ID:
+            await holdMessage.delete()
+            if embed is not None:
+                await ctx.send(response, embed=embed)
+            else:
+                await ctx.send(response)
+            if str(ctx.message.author.id) == str(credentials.OWNER_DISCORD_ID):
+                response, numberOfPlayers = getPlayers(mediaType)
+                if response:
                     askAboutPlayer = True
                     while askAboutPlayer:
                         try:
                             def check(react, reactUser, numPlayers):
                                 return str(react.emoji) in emoji_numbers[
                                                            :numberOfPlayers] and reactUser.id == credentials.OWNER_DISCORD_ID
-
-                            response, numberOfPlayers = getPlayers()
                             playerQuestion = await ctx.send(response)
                             for i in range(0, numberOfPlayers - 1):
                                 await playerQuestion.add_reaction(emoji_numbers[i])
                             reaction, user = await self.bot.wait_fo('reaction_add', timeout=60.0, check=check)
                             if reaction:
                                 playerNumber = emoji_numbers.index(str(reaction.emoji))
-                                playMedia(playerNumber, mediaItem)
+                                mediaItem = getFullMediaItem(mediaItem)
+                                if mediaItem:
+                                    playMedia(playerNumber, mediaItem)
+                                else:
+                                    await ctx.send(
+                                        "Sorry, something went wrong while loading that {}.".format(mediaType))
                         except asyncio.TimeoutError:
                             await playerQuestion.delete()
                             askAboutPlayer = False

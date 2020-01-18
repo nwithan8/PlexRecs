@@ -7,7 +7,7 @@ bot = commands.Bot(credentials.BOT_PREFIX)
 formatter = commands.HelpCommand(show_check_failure=False)
 
 exts = [
-    "__init__.py"
+    "__init__"
 ]
 for ext in exts:
     bot.load_extension(ext)
@@ -16,7 +16,7 @@ for ext in exts:
 @bot.event
 async def on_ready():
     print(f'\n\nLogged in as : {bot.user.name} - {bot.user.id}\nVersion: {discord.__version__}\n')
-    await bot.change_presence(status=discord.Status.idle, activity=discord.Game(name=f'the waiting game | {PREFIX}'))
+    await bot.change_presence(status=discord.Status.idle, activity=discord.Game(name=f'in the REC league | {credentials.BOT_PREFIX}'))
     print(f'Successfully logged in and booted...!\n')
 
 

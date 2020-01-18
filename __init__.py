@@ -1,4 +1,4 @@
-from .PlexRecs import PlexRecs
+from PlexRecs import PlexRecs
 
 
 def setup(bot):
