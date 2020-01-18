@@ -17,3 +17,5 @@ DISCORD_BOT_TOKEN = 'BOT TOKEN GOES HERE'
 
 # Right-click on your profile picture -> "Copy ID"
 OWNER_DISCORD_ID = 'YOUR DISCORD ID HERE'
+
+BOT_PREFIX = ''
