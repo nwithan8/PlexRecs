@@ -1,238 +1,299 @@
-#RUN THIS COMMAND TO INSTALL REQUIRED PACKAGES
-#pip3 install discord PlexAPI imdbpie requests progress
-
+import asyncio
 import discord
+from discord.ext import commands, tasks
+from discord.utils import get
+import credentials
 from plexapi.server import PlexServer
-from plexapi.myplex import MyPlexServerShare
-import plexapi
-from collections import defaultdict
-import random
-from imdbpie import Imdb
-from imdbpie import ImdbFacade
-import re
-import json
 import requests
+import json
+import re
+from imdbpie import Imdb, ImdbFacade
+import random
 from progress.bar import Bar
 
-
-#EDIT THESE VALUES
-PLEX_URL = 'http://[IP ADDRESS]:[PORT]'
-PLEX_TOKEN = 'YOUR TOKEN HERE'
-PLEX_SERVER_ID = 'YOUR SERVER ID HERE' #after "/server/" in browser UI URL
-SERVER_NICKNAME = 'YOUR SERVER NICKNAME'
-
-#http://[PMS_IP_Address]:32400/library/sections?X-Plex-Token=YourTokenGoesHere
-#Use the above link to find the number for each library: composite="/library/sections/NUMBER/composite/..."
-MOVIE_LIBRARY = 1 #Might be different for your Plex library
-TV_LIBRARY = 2 #Might be different for your Plex library
-MOVIE_LIBRARY_NAME=''
-TV_SHOW_LIBRARY_NAME=''
-
-TAUTULLI_BASE_URL = 'http://[IP ADDRESS]:[PORT]'
-TAUTULLI_API_KEY = 'YOUR API KEY HERE'
-
-#Right-click on your Discord bot's profile picture -> "Copy ID"
-BOT_ID = 'BOT ID GOES HERE'
-DISCORD_BOT_TOKEN = 'BOT TOKEN GOES HERE'
-
-#Right-click on your profile picture -> "Copy ID"
-OWNER_DISCORD_ID = 'YOUR DISCORD ID HERE'
-
-
-client = discord.Client()
-
-plex = PlexServer(PLEX_URL, PLEX_TOKEN)
+plex = PlexServer(credentials.PLEX_URL, credentials.PLEX_TOKEN)
 
 imdbf = ImdbFacade()
 imdb = Imdb()
 
-shows = defaultdict(list)
-movies = defaultdict(list)
+MOVIES = []
+SHOWS = []
+ARTISTS = []
 
 owner_players = []
-emoji_numbers = [u"1\u20e3",u"2\u20e3",u"3\u20e3",u"4\u20e3",u"5\u20e3"]
+emoji_numbers = [u"1\u20e3", u"2\u20e3", u"3\u20e3", u"4\u20e3", u"5\u20e3"]
+
 
 def request(cmd, params):
-    return requests.get(TAUTULLI_BASE_URL + "/api/v2?apikey=" + TAUTULLI_API_KEY + "&" + str(params) + "&cmd=" + str(cmd)) if params != None else requests.get(TAUTULLI_BASE_URL + "/api/v2?apikey=" + TAUTULLI_API_KEY + "&cmd=" + str(cmd))
+    url = '{base}/api/v2?apikey={key}&cmd={cmd}'.format(base=credentials.TAUTULLI_API_KEY,
+                                                        key=credentials.TAUTULLI_API_KEY, cmd=cmd)
+    if params:
+        url = '{base}/api/v2?apikey={key}&{params}&cmd={cmd}'.format(base=credentials.TAUTULLI_BASE_URL,
+                                                                     key=credentials.TAUTULLI_API_KEY,
+                                                                     params=params, cmd=cmd)
+    return json.loads(requests.get(url).text)
 
-def getlibrary(library):
-    global shows, movies
-    items = defaultdict(list)
-    media = plex.library.section(MOVIE_LIBRARY_NAME) if library == MOVIE_LIBRARY else plex.library.section(TV_SHOW_LIBRARY_NAME)
-    if library == MOVIE_LIBRARY:
-        if not movies:
-            json_data = json.loads(request("get_library", "section_id=" + str(MOVIE_LIBRARY)).text)
-            count = json_data['response']['data']['count']
+
+def cleanLibraries():
+    global MOVIES, SHOWS, ARTISTS
+    MOVIES.clear
+    SHOWS.clear
+    ARTISTS.clear
+
+
+def makeLibrary(libraryNumber):
+    try:
+        global MOVIES, SHOWS, ARTISTS
+        librarySection = plex.library.sectionByID(libraryNumber)
+        json_data = request("get_library", "section_id={}".format(libraryNumber))
+        count = json_data['response']['data']['count']
+        if libraryNumber in credentials.MOVIE_LIBRARIES and not MOVIES:
             bar = Bar('Loading movies', max=int(count))
-            for results in media.search():
-                movies['Results'].append([results.title, results.year])
+            for item in librarySection.all():
+                MOVIES.append([item.title, item.year])
                 bar.next()
             bar.finish()
-    else:
-        if not shows:
-            json_data = json.loads(request("get_library", "section_id=" + str(TV_LIBRARY)).text)
-            count = json_data['response']['data']['count']
+            return True
+        elif libraryNumber in credentials.TV_LIBRARIES and not SHOWS:
             bar = Bar('Loading TV shows', max=int(count))
-            for results in media.search():
-                shows['Results'].append([results.title, results.year])
+            for item in librarySection.all():
+                SHOWS.append([item.title, item.year])
                 bar.next()
             bar.finish()
-
-def getposter(att, title):
-    try:
-        att.set_image(url=str(imdbf.get_title(imdb.search_for_title(title)[0]['imdb_id']).image.url))
-        return att
-    except IndexError:
-        return att
-
-def unwatched(library, username):
-    global shows, movies
-    media_type = ""
-    library_name = ""
-    if library == MOVIE_LIBRARY:
-        library_name = MOVIE_LIBRARY_NAME
-        media_type = "movie"
-    else:
-        library_name = TV_SHOW_LIBRARY_NAME
-        media_type = "show"
-    json_data = json.loads(request("get_users", None).text)
-    names = []
-    ids = []
-    for user in json_data['response']['data']:
-        names.append(user['username'])
-        ids.append(user['user_id'])
-    try:
-        user_id = str(ids[names.index(username)])
-    except:
-        return "I couldn\'t find that username. Please check and try again.", None, None, None
-    json_data = json.loads(request("get_history","user_id=" + str(user_id) + "&length=10000").text)
-    watched_titles = []
-    for watched_item in json_data['response']['data']['data']:
-        watched_titles.append(watched_item["full_title"])
-    unwatched_titles = []
-    for media in (movies['Results'] if media_type == "movie" else shows['Results']):
-        if not media[0] in watched_titles:
-            unwatched_titles.append(media)
-    rand = random.choice(unwatched_titles)
-    try:
-        suggestion = plex.library.section(library_name).search(title=rand[0],year=rand[1])[0]
-    except:
-        return "Oops, something went wrong. Want to try again?", None, None, None
-    att = discord.Embed(title=str(suggestion.title), url="https://app.plex.tv/desktop#!/server/" + PLEX_SERVER_ID + "/details?key=%2Flibrary%2Fmetadata%2F" + str(suggestion.ratingKey), description="Watch it on " + SERVER_NICKNAME)
-    att = getposter(att, str(suggestion.title))
-    return "How about " + str(suggestion.title) + "?", media_type, att, suggestion
-
-def findrec(library):
-    global shows, movies
-    suggestion = 0
-    media_type = ""
-    if library == MOVIE_LIBRARY:
-        rand = random.choice(movies['Results'])
-        try:
-            suggestion = plex.library.section(MOVIE_LIBRARY_NAME).search(title=rand[0],year=rand[1])[0]
-        except:
-            return "Oops, something went wrong. Want to try again?", None, None, None
-        media_type = "movie"
-    else:
-        rand = random.choice(shows['Results'])
-        try:
-            suggestion = plex.library.section(TV_SHOW_LIBRARY_NAME).search(title=rand[0],year=rand[1])[0]
-        except:
-            return "Oops, something went wrong. Want to try again?", None, None, None
-        media_type = "show"
-    att = discord.Embed(title=str(suggestion.title), url="https://app.plex.tv/desktop#!/server/" + PLEX_SERVER_ID + "/details?key=%2Flibrary%2Fmetadata%2F" + str(suggestion.ratingKey), description="Watch it on " + SERVER_NICKNAME)
-    att = getposter(att, str(suggestion.title))
-    return "How about " + str(suggestion.title) + "?", media_type, att, suggestion
-
-async def recommend(message):
-    library = 0
-    plex_username = ""
-    if str(message.author.id) != str(BOT_ID):
-        if "movie" in message.content.lower() or "tv" in message.content.lower() or "show" in message.content.lower():
-            if "new" in message.content.lower():
-                if not "%" in message.content:
-                    return "Please try again. Make sure to include \'%\' followed by your Plex username.", None, None, None
-                else:
-                    splitted = str(message.content).split("%")
-                    if "@" in str(splitted[-1:]):
-                        plex_username = str(re.findall('[\w\.-]+@[\w\.-]+\.\w+', str(splitted[-1:])))
-                    else:
-                        plex_username = str(re.findall('[%]\w+', message.content))[3:]
-                    plex_username = plex_username.replace(r"'","")
-                    plex_username = plex_username.replace("[","")
-                    plex_username = plex_username.replace("]","").strip()
-                    if plex_username == "":
-                        return "Please try again. Make sure you include '%' directly in front of your Plex username (ex. %myusername).", None, None, None
-            await message.channel.send("Looking for a recommendation. This might take a sec, please be patient...")
-            if "movie" in message.content.lower():
-                library = MOVIE_LIBRARY
-                if "new" in message.content.lower():
-                    return unwatched(library, plex_username)
-                else:
-                    return findrec(library)
-            elif "tv" in message.content.lower() or "show" in message.content.lower():
-                library = TV_LIBRARY
-                if "new" in message.content.lower():
-                    return unwatched(library, plex_username)
-                else:
-                    return findrec(library)
+            return True
+        elif libraryNumber in credentials.MOVIE_LIBRARIES and not ARTISTS:
+            bar = Bar('Loading musical artists', max=int(count))
+            for item in librarySection.all():
+                ARTISTS.append([item.title, item.year])
+                bar.next()
+            bar.finish()
+            return True
         else:
-            return "Please ask again, indicating if you want a movie or a TV show.\nIf you only want shows or movies you haven\'t seen before, include the word \'new\' and \'%<your Plex username>\'.", None, None, None
+            return False
+    except Exception as e:
+        print('Error grabbing libraries: {}'.format(e))
+        return False
 
-def getPlayers(media_type):
+
+def getPoster(embed, title):
+    try:
+        embed.set_image(url=str(imdbf.get_title(imdb.search_for_title(title)[0]['imdb_id']).image.url))
+        return embed
+    except Exception as e:
+        print("Error getting poster: {}".format(e))
+        return embed
+
+
+def makeEmbed(mediaItem):
+    embed = discord.Embed(title=mediaItem.title,
+                          url='{base}/web/index.html#!/server/{id}/details?key=%2Flibrary%2Fmetadata%2F{ratingKey}'.format(
+                              base=credentials.PLEX_URL, id=credentials.PLEX_SERVER_ID, ratingKey=mediaItem.ratingKey),
+                          description="Watch it on {}".format(credentials.PLEX_SERVER_NAME))
+    embed = getPoster(embed, mediaItem.title)
+    return embed
+
+
+def getHistory(username, sectionIDs):
+    user_id = ""
+    users = request('get_users', None)
+    for user in users['response']['data']:
+        if user['username'] == username:
+            user_id = user['user_id']
+            break
+    if not user_id:
+        print("I couldn't find that username. Please check and try again.")
+        return False
+    watched_titles = []
+    for sectionID in sectionIDs:
+        history = request('get_history', 'section_id={}&user_id={}&length=10000'.format(str(sectionID), user_id))
+        for watched_item in history['response']['data']['data']:
+            watched_titles.append(watched_item['full_title'])
+    return watched_titles
+
+
+def pickUnwatched(history, mediaList):
+    """
+    Keep picking until something is unwatched
+    :param history:
+    :param mediaList: Movies list, Shows list or Artists list
+    :return:
+    """
+    if not history:
+        return False
+    choice = random.choice(mediaList)
+    if choice.title in history:
+        return pickUnwatched(history, mediaList)
+    return choice
+
+
+def pickRandom(aList):
+    return random.choice(aList)
+
+
+def findRec(username, mediaType, unwatched=False):
+    """
+
+    :param username:
+    :param unwatched:
+    :param mediaType: 'movie', 'show' or 'artist'
+    :return:
+    """
+    try:
+        if unwatched:
+            if mediaType == 'movie':
+                return pickUnwatched(history=getHistory(username, credentials.MOVIE_LIBRARIES), mediaList=MOVIES)
+            elif mediaType == 'show':
+                return pickUnwatched(history=getHistory(username, credentials.TV_LIBRARIES), mediaList=SHOWS)
+            elif mediaType == 'artist':
+                return pickUnwatched(history=getHistory(username, credentials.MUSIC_LIBRARIES), mediaList=ARTISTS)
+        else:
+            if mediaType == 'movie':
+                return pickRandom(MOVIES)
+            elif mediaType == 'show':
+                return pickRandom(SHOWS)
+            elif mediaType == 'artist':
+                return pickRandom(ARTISTS)
+    except Exception as e:
+        print("Error in findRec: {}".format(e))
+        return False
+
+
+def makeRecommendation(mediaType, unwatched, PlexUsername):
+    if unwatched:
+        if not PlexUsername:
+            return "Please include a Plex username"
+        recommendation = findRec(PlexUsername, mediaType, True)
+        if not recommendation:
+            return "I couldn't find that Plex username"
+        embed = makeEmbed(recommendation)
+        return "How about {}?".format(recommendation.title), embed, recommendation
+
+
+def getPlayers(mediaType):
     global owner_players
     owner_players = []
     players = plex.clients()
     if not players:
-        return f"Sorry, you have no available players to start playing from. Make sure your app is open and on the same network as {SERVER_NICKNAME}.", 0
-    else:
-        num = 0
-        player_list = "Available players:"
-        for i in players[:5]:
-            num = num + 1
-            player_list = player_list + "\n" + (str(num) + ": " + str(i.title))
-            owner_players.append(i)
-        return player_list + "\nReact with which player you want to start this " + str(media_type) + " on.", num
-        
+        return False
+    num = 0
+    players_list = ""
+    for player in players[:5]:
+        num = num + 1
+        players_list = '{}\n{}:{}'.format(players_list, num, player.title)
+        owner_players.append(player)
+    return '{}\nReact with which player you want to start this {} on.'.format(players_list, mediaType), num
 
-async def playIt(reaction, user, suggestion):
-    if str(reaction.message.author.id) == str(BOT_ID) and str(user.id) != str(BOT_ID):
-        loc = emoji_numbers.index(str(reaction.emoji))
-        try:
-            owner_players[loc].goToMedia(suggestion)
-        except:
-            pass
-    
-@client.event
-async def on_ready():
-    getlibrary(MOVIE_LIBRARY)
-    getlibrary(TV_LIBRARY)
-    print('Ready to give recommendations!')
-    game=discord.Game(name="Ask me for a recommendation.")
-    await client.change_presence(activity=game)
 
-@client.event
-async def on_message(message):
-    global current_owner_suggestion
-    if (str(BOT_ID) in str(message.mentions)) or ("Direct Message" in str(message.channel) and str(message.author.id) != str(BOT_ID)):
-        if "recommend" in message.content.lower() or "suggest" in message.content.lower():
-            response, media_type, att, sugg = await recommend(message)
-            if att is not None:
-                await message.channel.send(response, embed=att)
-                if str(message.author.id) == str(OWNER_DISCORD_ID):
-                    available_players, num_of_players = getPlayers(media_type)
-                    players_message = await message.channel.send(available_players)
-                    if num_of_players != 0:
-                        for i in range(num_of_players):
-                            await players_message.add_reaction(emoji_numbers[i])
-                        def check(reaction, user):
-                            return user == message.author
-                        reaction, user = await client.wait_for('reaction_add', check=check)
-                        if reaction:
-                            await playIt(reaction, user, sugg)
+def playMedia(playerNumber, mediaItem):
+    owner_players[playerNumber].goToMedia(mediaItem)
+
+
+class PlexRecs(commands.Cogs):
+
+    @tasks.loop(minutes=60.0)  # update library every hour
+    async def makeLibraries(self):
+        cleanLibraries()
+        libraryNumbers = credentials.MOVIE_LIBRARIES + list(
+            set(credentials.TV_LIBRARIES) - set(credentials.MOVIE_LIBRARIES))
+        libraryNumbers = libraryNumbers + list(set(credentials.MUSIC_LIBRARIES) - set(libraryNumbers))
+        for libraryNumber in libraryNumbers:
+            makeLibrary(libraryNumber)
+
+    @commands.group(aliases=['recommend', 'suggest', 'rec', 'sugg'], pass_context=True)
+    async def plex_rec(self, ctx: commands.Context, mediaType: str):
+        """
+        Movie, show or artist recommendation from Plex
+
+        Say 'movie', 'show' or 'artist'
+        Use 'rec <mediaType> new <PlexUsername>' for an unwatched recommendation.
+        """
+        if ctx.invoked_subcommand is None:
+            if mediaType.lower() not in ['movie', 'show', 'artist']:
+                await ctx.send("Please try again, indicating either 'movie', 'show', or 'artist'")
             else:
-                await message.channel.send(response)
-        elif "help" in message.content.lower() or "hello" in message.content.lower() or "hey" in message.content.lower():
-            await message.channel.send("Ask me for a recommendation or a suggestion.")
+                await ctx.send("Looking for a {}...".format(mediaType))
+                async with ctx.typing():
+                    response, embed, mediaItem = makeRecommendation(mediaType, False, None)
+                    if embed is not None:
+                        await ctx.send(response, embed=embed)
+                    else:
+                        await ctx.send(response)
+                    if ctx.message.author.id == credentials.OWNER_DISCORD_ID:
+                        askAboutPlayer = True
+                        while askAboutPlayer:
+                            try:
+                                def check(react, reactUser, numPlayers):
+                                    return str(react.emoji) in emoji_numbers[
+                                                               :numberOfPlayers] and reactUser.id == credentials.OWNER_DISCORD_ID
 
-client.run(DISCORD_BOT_TOKEN)
+                                response, numberOfPlayers = getPlayers()
+                                playerQuestion = await ctx.send(response)
+                                for i in range(0, numberOfPlayers - 1):
+                                    await playerQuestion.add_reaction(emoji_numbers[i])
+                                reaction, user = await self.bot.wait_fo('reaction_add', timeout=60.0, check=check)
+                                if reaction:
+                                    playerNumber = emoji_numbers.index(str(reaction.emoji))
+                                    playMedia(playerNumber, mediaItem)
+                            except asyncio.TimeoutError:
+                                await playerQuestion.delete()
+                                askAboutPlayer = False
+
+    @plex_rec.error
+    async def plex_rec_error(self, ctx, error):
+        print(error)
+        await ctx.send("Sorry, something went wrong while looking for a recommendation.")
+
+    @plex_rec.command(name="new", aliases=['unwatched', 'unseen', 'unlistened'])
+    async def plex_rec_new(self, ctx: commands.Context, PlexUsername: str):
+        """
+        Get a new movie, show or artist recommendation
+        Include your Plex username
+        """
+        mediaType = None
+        if 'movie' in ctx.message.content.lower():
+            mediaType = 'movie'
+        elif 'show' in ctx.message.content.lower():
+            mediaType = 'show'
+        elif 'artist' in ctx.message.content.lower():
+            mediaType = 'artist'
+        else:
+            pass
+        if not mediaType:
+            await ctx.send("Please try again, indicating either 'movie', 'show', or 'artist'")
+        else:
+            await ctx.send("Looking for a new {}...".format(mediaType))
+            async with ctx.typing():
+                response, embed, mediaItem = makeRecommendation(mediaType, True, PlexUsername)
+                if embed is not None:
+                    await ctx.send(response, embed=embed)
+                else:
+                    await ctx.send(response)
+                if ctx.message.author.id == credentials.OWNER_DISCORD_ID:
+                    askAboutPlayer = True
+                    while askAboutPlayer:
+                        try:
+                            def check(react, reactUser, numPlayers):
+                                return str(react.emoji) in emoji_numbers[
+                                                           :numberOfPlayers] and reactUser.id == credentials.OWNER_DISCORD_ID
+
+                            response, numberOfPlayers = getPlayers()
+                            playerQuestion = await ctx.send(response)
+                            for i in range(0, numberOfPlayers - 1):
+                                await playerQuestion.add_reaction(emoji_numbers[i])
+                            reaction, user = await self.bot.wait_fo('reaction_add', timeout=60.0, check=check)
+                            if reaction:
+                                playerNumber = emoji_numbers.index(str(reaction.emoji))
+                                playMedia(playerNumber, mediaItem)
+                        except asyncio.TimeoutError:
+                            await playerQuestion.delete()
+                            askAboutPlayer = False
+
+    @plex_rec_new.error
+    async def plex_rec_new_error(self, ctx, error):
+        print(error)
+        await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
+
+    def __init__(self, bot):
+        self.bot = bot
+        print("Updating Plex libraries...")
+        self.makeLibraries.start()
