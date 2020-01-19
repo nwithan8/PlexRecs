@@ -14,9 +14,9 @@ plex = PlexServer(credentials.PLEX_URL, credentials.PLEX_TOKEN)
 imdbf = ImdbFacade()
 imdb = Imdb()
 
-MOVIES = []
-SHOWS = []
-ARTISTS = []
+libraries = {}
+for name, numbers in credentials.LIBRARIES.items():
+    libraries[name] = [numbers, []]
 
 owner_players = []
 emoji_numbers = [u"1\u20e3", u"2\u20e3", u"3\u20e3", u"4\u20e3", u"5\u20e3"]
@@ -33,10 +33,9 @@ def request(cmd, params):
 
 
 def cleanLibraries():
-    global MOVIES, SHOWS, ARTISTS
-    MOVIES.clear
-    SHOWS.clear
-    ARTISTS.clear
+    global libraries
+    for groupName, items in libraries.items():
+        items[1].clear
 
 
 class SmallMediaItem:
@@ -47,35 +46,21 @@ class SmallMediaItem:
         self.librarySectionID = librarySectionID
 
 
-def makeLibrary(libraryNumber):
+def makeLibrary(libraryName):
     try:
-        global MOVIES, SHOWS, ARTISTS
-        librarySection = plex.library.sectionByID(str(libraryNumber))
-        json_data = request("get_library", "section_id={}".format(libraryNumber))
-        count = json_data['response']['data']['count']
-        if libraryNumber in credentials.MOVIE_LIBRARIES and not MOVIES:
-            bar = Bar('Loading movies', max=int(count))
-            for item in librarySection.all():
-                MOVIES.append(SmallMediaItem(item.title, item.year, item.ratingKey, item.librarySectionID))
-                bar.next()
-            bar.finish()
+        global libraries
+        if not libraries[libraryName][1]:
+            for libraryNumber in libraries[libraryName][0]:
+                json_data = request("get_library", "section_id={}".format(libraryNumber))
+                count = json_data['response']['data']['count']
+                bar = Bar('Loading {} (Library section {})'.format(libraryName, libraryNumber), max=int(count))
+                librarySection = plex.library.sectionByID(str(libraryNumber))
+                for item in librarySection.all():
+                    libraries[libraryName][1].append(SmallMediaItem(item.title, (None if librarySection.type == 'artist' else item.year), item.ratingKey, item.librarySectionID))
+                    bar.next()
+                bar.finish()
             return True
-        elif libraryNumber in credentials.TV_LIBRARIES and not SHOWS:
-            bar = Bar('Loading TV shows', max=int(count))
-            for item in librarySection.all():
-                SHOWS.append(SmallMediaItem(item.title, item.year, item.ratingKey, item.librarySectionID))
-                bar.next()
-            bar.finish()
-            return True
-        elif libraryNumber in credentials.MUSIC_LIBRARIES and not ARTISTS:
-            bar = Bar('Loading musical artists', max=int(count))
-            for item in librarySection.all():
-                ARTISTS.append(SmallMediaItem(item.title, None, item.ratingKey, item.librarySectionID))
-                bar.next()
-            bar.finish()
-            return True
-        else:
-            return False
+        return False
     except Exception as e:
         print('Error in makeLibrary: {}'.format(e))
         return False
@@ -102,7 +87,7 @@ def makeEmbed(mediaItem):
 
 def getHistory(username, sectionIDs):
     try:
-        user_id = ""
+        user_id = None
         users = request('get_users', None)
         for user in users['response']['data']:
             if user['username'] == username:
@@ -110,7 +95,7 @@ def getHistory(username, sectionIDs):
                 break
         if not user_id:
             print("I couldn't find that username. Please check and try again.")
-            return False
+            return "Error"
         watched_titles = []
         for sectionID in sectionIDs:
             history = request('get_history', 'section_id={}&user_id={}&length=10000'.format(str(sectionID), user_id))
@@ -119,7 +104,7 @@ def getHistory(username, sectionIDs):
         return watched_titles
     except Exception as e:
         print("Error in getHistory: {}".format(e))
-        return False
+        return "Error"
 
 
 def pickUnwatched(history, mediaList):
@@ -129,7 +114,7 @@ def pickUnwatched(history, mediaList):
     :param mediaList: Movies list, Shows list or Artists list
     :return: SmallMediaItem object
     """
-    if not history:
+    if history == "Error":
         return False
     choice = random.choice(mediaList)
     if choice.title in history:
@@ -151,19 +136,9 @@ def findRec(username, mediaType, unwatched=False):
     """
     try:
         if unwatched:
-            if mediaType == 'movie':
-                return pickUnwatched(history=getHistory(username, credentials.MOVIE_LIBRARIES), mediaList=MOVIES)
-            elif mediaType == 'show':
-                return pickUnwatched(history=getHistory(username, credentials.TV_LIBRARIES), mediaList=SHOWS)
-            elif mediaType == 'artist':
-                return pickUnwatched(history=getHistory(username, credentials.MUSIC_LIBRARIES), mediaList=ARTISTS)
+            return pickUnwatched(history=getHistory(username, libraries[mediaType][0]), mediaList=libraries[mediaType][1])
         else:
-            if mediaType == 'movie':
-                return pickRandom(MOVIES)
-            elif mediaType == 'show':
-                return pickRandom(SHOWS)
-            elif mediaType == 'artist':
-                return pickRandom(ARTISTS)
+            return pickRandom(libraries[mediaType][1])
     except Exception as e:
         print("Error in findRec: {}".format(e))
         return False
@@ -214,11 +189,8 @@ class PlexRecs(commands.Cog):
     @tasks.loop(minutes=60.0)  # update library every hour
     async def makeLibraries(self):
         cleanLibraries()
-        libraryNumbers = credentials.MOVIE_LIBRARIES + list(
-            set(credentials.TV_LIBRARIES) - set(credentials.MOVIE_LIBRARIES))
-        libraryNumbers = libraryNumbers + list(set(credentials.MUSIC_LIBRARIES) - set(libraryNumbers))
-        for libraryNumber in libraryNumbers:
-            makeLibrary(libraryNumber)
+        for groupName in libraries.keys():
+            makeLibrary(groupName)
 
     @commands.group(aliases=['recommend', 'suggest', 'rec', 'sugg'], pass_context=True)
     async def plex_rec(self, ctx: commands.Context, mediaType: str):
@@ -229,10 +201,13 @@ class PlexRecs(commands.Cog):
         Use 'rec <mediaType> new <PlexUsername>' for an unwatched recommendation.
         """
         if ctx.invoked_subcommand is None:
-            if mediaType.lower() not in ['movie', 'show', 'artist']:
-                await ctx.send("Please try again, indicating either 'movie', 'show', or 'artist'")
+            if mediaType.lower() not in libraries.keys():
+                acceptedTypes = "', '".join(libraries.keys())
+                await ctx.send("Please try again, indicating '{}'".format(acceptedTypes))
             else:
-                holdMessage = await ctx.send("Looking for a{} {}...".format("n" if (mediaType[0] in ['a','e','i','o','u']) else "", mediaType))
+                holdMessage = await ctx.send(
+                    "Looking for a{} {}...".format("n" if (mediaType[0] in ['a', 'e', 'i', 'o', 'u']) else "",
+                                                   mediaType))
                 async with ctx.typing():
                     response, embed, mediaItem = makeRecommendation(mediaType, False, None)
                 await holdMessage.delete()
@@ -249,6 +224,7 @@ class PlexRecs(commands.Cog):
                                 def check(react, reactUser, numPlayers):
                                     return str(react.emoji) in emoji_numbers[
                                                                :numberOfPlayers] and reactUser.id == credentials.OWNER_DISCORD_ID
+
                                 playerQuestion = await ctx.send(response)
                                 for i in range(0, numberOfPlayers - 1):
                                     await playerQuestion.add_reaction(emoji_numbers[i])
@@ -277,16 +253,13 @@ class PlexRecs(commands.Cog):
         Include your Plex username
         """
         mediaType = None
-        if 'movie' in ctx.message.content.lower():
-            mediaType = 'movie'
-        elif 'show' in ctx.message.content.lower():
-            mediaType = 'show'
-        elif 'artist' in ctx.message.content.lower():
-            mediaType = 'artist'
-        else:
-            pass
+        for group in libraries.keys():
+            if group in ctx.message.content:
+                mediaType = group
+                break
         if not mediaType:
-            await ctx.send("Please try again, indicating either 'movie', 'show', or 'artist'")
+            acceptedTypes = "', '".join(libraries.keys())
+            await ctx.send("Please try again, indicating '{}'".format(acceptedTypes))
         else:
             holdMessage = await ctx.send("Looking for a new {}...".format(mediaType))
             async with ctx.typing():
@@ -305,6 +278,7 @@ class PlexRecs(commands.Cog):
                             def check(react, reactUser, numPlayers):
                                 return str(react.emoji) in emoji_numbers[
                                                            :numberOfPlayers] and reactUser.id == credentials.OWNER_DISCORD_ID
+
                             playerQuestion = await ctx.send(response)
                             for i in range(0, numberOfPlayers - 1):
                                 await playerQuestion.add_reaction(emoji_numbers[i])
