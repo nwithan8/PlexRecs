@@ -13,9 +13,9 @@ DISCLAIMER: This bot requires a Discord account and server, a Plex Media Server 
 
 # Usage
 
-Once the bot is up and running, trigger it by typing "[PREFIX] recommend [movie/show/artist]" to get a randomly selected movie/show/artist recommendation.
+Once the bot is up and running, trigger it by typing "[PREFIX] recommend [CATEGORY]" to get a randomly selected movie/show/artist recommendation.
 
-To only get recommended something you have not already watched/listened to, type "[PREFIX] recommend [movie/show/artist] new [Your Plex Username]".
+To only get recommended something you have not already watched/listened to, type "[PREFIX] recommend [CATEGORY] new [Your Plex Username]".
 
 # Features
 In addition to a recommendation, the owner of the Plex Server (whoever has the OWNER_DISCORD_ID) will be offered up to five available players that they can have the recommendation automatically play on.
