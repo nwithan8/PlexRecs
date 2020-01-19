@@ -1,4 +1,4 @@
-discordpy
+discord.py
 requests
 progress
 PlexAPI
