@@ -80,7 +80,7 @@ def makeEmbed(mediaItem):
                           url='{base}/web/index.html#!/server/{id}/details?key=%2Flibrary%2Fmetadata%2F{ratingKey}'.format(
                               base=credentials.PLEX_URL, id=credentials.PLEX_SERVER_ID, ratingKey=mediaItem.ratingKey,
                               description="Watch it on {}".format(credentials.PLEX_SERVER_NAME)))
-    if int(mediaItem.librarySectionID) not in credentials.MUSIC_LIBRARIES:
+    if mediaItem.type not in ['artist', 'album', 'track']:
         embed = getPoster(embed, mediaItem.title)
     return embed
 
@@ -228,7 +228,7 @@ class PlexRecs(commands.Cog):
                                 playerQuestion = await ctx.send(response)
                                 for i in range(0, numberOfPlayers - 1):
                                     await playerQuestion.add_reaction(emoji_numbers[i])
-                                reaction, user = await self.bot.wait_fo('reaction_add', timeout=60.0, check=check)
+                                reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check)
                                 if reaction:
                                     playerNumber = emoji_numbers.index(str(reaction.emoji))
                                     mediaItem = getFullMediaItem(mediaItem)
@@ -282,7 +282,7 @@ class PlexRecs(commands.Cog):
                             playerQuestion = await ctx.send(response)
                             for i in range(0, numberOfPlayers - 1):
                                 await playerQuestion.add_reaction(emoji_numbers[i])
-                            reaction, user = await self.bot.wait_fo('reaction_add', timeout=60.0, check=check)
+                            reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check)
                             if reaction:
                                 playerNumber = emoji_numbers.index(str(reaction.emoji))
                                 mediaItem = getFullMediaItem(mediaItem)
