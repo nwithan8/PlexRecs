@@ -39,12 +39,12 @@ def cleanLibraries():
 
 
 class SmallMediaItem:
-    def __init__(self, title, year, ratingKey, librarySectionID):
+    def __init__(self, title, year, ratingKey, librarySectionID, mediaType):
         self.title = title
         self.year = year
         self.ratingKey = ratingKey
         self.librarySectionID = librarySectionID
-
+        self.type = mediaType
 
 def makeLibrary(libraryName):
     try:
@@ -56,7 +56,7 @@ def makeLibrary(libraryName):
                 bar = Bar('Loading {} (Library section {})'.format(libraryName, libraryNumber), max=int(count))
                 librarySection = plex.library.sectionByID(str(libraryNumber))
                 for item in librarySection.all():
-                    libraries[libraryName][1].append(SmallMediaItem(item.title, (None if librarySection.type == 'artist' else item.year), item.ratingKey, item.librarySectionID))
+                    libraries[libraryName][1].append(SmallMediaItem(title=item.title, year=(None if librarySection.type == 'artist' else item.year), ratingKey=item.ratingKey, librarySectionID=item.librarySectionID, mediaType=item.type))
                     bar.next()
                 bar.finish()
             return True
