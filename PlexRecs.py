@@ -46,6 +46,7 @@ class SmallMediaItem:
         self.librarySectionID = librarySectionID
         self.type = mediaType
 
+
 def makeLibrary(libraryName):
     try:
         global libraries
@@ -56,7 +57,10 @@ def makeLibrary(libraryName):
                 bar = Bar('Loading {} (Library section {})'.format(libraryName, libraryNumber), max=int(count))
                 librarySection = plex.library.sectionByID(str(libraryNumber))
                 for item in librarySection.all():
-                    libraries[libraryName][1].append(SmallMediaItem(title=item.title, year=(None if librarySection.type == 'artist' else item.year), ratingKey=item.ratingKey, librarySectionID=item.librarySectionID, mediaType=item.type))
+                    libraries[libraryName][1].append(
+                        SmallMediaItem(title=item.title, year=(None if librarySection.type == 'artist' else item.year),
+                                       ratingKey=item.ratingKey, librarySectionID=item.librarySectionID,
+                                       mediaType=item.type))
                     bar.next()
                 bar.finish()
             return True
@@ -136,7 +140,8 @@ def findRec(username, mediaType, unwatched=False):
     """
     try:
         if unwatched:
-            return pickUnwatched(history=getHistory(username, libraries[mediaType][0]), mediaList=libraries[mediaType][1])
+            return pickUnwatched(history=getHistory(username, libraries[mediaType][0]),
+                                 mediaList=libraries[mediaType][1])
         else:
             return pickRandom(libraries[mediaType][1])
     except Exception as e:

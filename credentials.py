@@ -1,4 +1,6 @@
 # EDIT THESE VALUES
+import os
+
 PLEX_URL = ''
 PLEX_TOKEN = ''
 PLEX_SERVER_ID = ''  # after "/server/" in browser UI URL
@@ -14,7 +16,7 @@ PLEX_SERVER_NAME = ''
 LIBRARIES = {
     'movie': [1],
     'show': [2],
-    'musical artist': [3, 6],
+    'music': [3, 6],
     '4k': [4],
     'anime': [5]
 }
@@ -27,4 +29,4 @@ DISCORD_BOT_TOKEN = ''
 # Right-click on your profile picture -> "Copy ID"
 OWNER_DISCORD_ID = ''
 
-BOT_PREFIX = '*'
+BOT_PREFIX = '?'
