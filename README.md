@@ -1,7 +1,7 @@
 # PlexRecs
 A Discord bot that provides movie and TV show recommendations from your Plex library
 
-DISCLAIMER: This bot requires a Discord account and server, a Plex Media Server and Tautulli/PlexPy (Plex monitoring) software to function.
+DISCLAIMER: This bot requires a Discord account and server, a Plex Media Server and Tautulli/PlexPy (Plex monitoring) software to function. **Requires Python 3.6+**
 
 # Setup
 1. Make a Discord Bot (HOW TO MAKE A DISCORD BOT: https://discordpy.readthedocs.io/en/rewrite/discord.html). Bot will need read/write text channel permissions, including links, attachments and emojis, and message management. 
