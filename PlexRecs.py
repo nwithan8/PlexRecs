@@ -5,14 +5,13 @@ import credentials
 from plexapi.server import PlexServer
 import requests
 import json
-from imdbpie import Imdb, ImdbFacade
+from imdbpie import ImdbFacade
 import random
 from progress.bar import Bar
 
 plex = PlexServer(credentials.PLEX_URL, credentials.PLEX_TOKEN)
 
-imdbf = ImdbFacade()
-imdb = Imdb()
+imdb = ImdbFacade()
 
 libraries = {}
 for name, numbers in credentials.LIBRARIES.items():
@@ -23,19 +22,16 @@ emoji_numbers = [u"1\u20e3", u"2\u20e3", u"3\u20e3", u"4\u20e3", u"5\u20e3"]
 
 
 def request(cmd, params):
-    url = '{base}/api/v2?apikey={key}&cmd={cmd}'.format(base=credentials.TAUTULLI_BASE_URL,
-                                                        key=credentials.TAUTULLI_API_KEY, cmd=cmd)
+    url = f'{credentials.TAUTULLI_BASE_URL}/api/v2?apikey={credentials.TAUTULLI_API_KEY}&cmd={cmd}'
     if params:
-        url = '{base}/api/v2?apikey={key}&{params}&cmd={cmd}'.format(base=credentials.TAUTULLI_BASE_URL,
-                                                                     key=credentials.TAUTULLI_API_KEY,
-                                                                     params=params, cmd=cmd)
+        url = f'{credentials.TAUTULLI_BASE_URL}/api/v2?apikey={credentials.TAUTULLI_API_KEY}&{params}&cmd={cmd}'
     return json.loads(requests.get(url).text)
 
 
 def cleanLibraries():
     global libraries
     for groupName, items in libraries.items():
-        items[1].clear
+        items[1].clear()
 
 
 class SmallMediaItem:
@@ -52,9 +48,9 @@ def makeLibrary(libraryName):
         global libraries
         if not libraries[libraryName][1]:
             for libraryNumber in libraries[libraryName][0]:
-                json_data = request("get_library", "section_id={}".format(libraryNumber))
+                json_data = request("get_library", f"section_id={libraryNumber}")
                 count = json_data['response']['data']['count']
-                bar = Bar('Loading {} (Library section {})'.format(libraryName, libraryNumber), max=int(count))
+                bar = Bar(f'Loading {libraryName} (Library section {libraryNumber})', max=int(count))
                 librarySection = plex.library.sectionByID(str(libraryNumber))
                 for item in librarySection.all():
                     libraries[libraryName][1].append(
@@ -66,26 +62,28 @@ def makeLibrary(libraryName):
             return True
         return False
     except Exception as e:
-        print('Error in makeLibrary: {}'.format(e))
-        return False
-
-
-def getPoster(embed, title):
-    try:
-        embed.set_image(url=str(imdbf.get_title(imdb.search_for_title(title)[0]['imdb_id']).image.url))
-        return embed
-    except Exception as e:
-        print("Error in getPoster: {}".format(e))
-        return embed
+        print(f'Error in makeLibrary: {e}')
+    return False
 
 
 def makeEmbed(mediaItem):
-    embed = discord.Embed(title=mediaItem.title,
-                          url='{base}/web/index.html#!/server/{id}/details?key=%2Flibrary%2Fmetadata%2F{ratingKey}'.format(
-                              base=credentials.PLEX_URL, id=credentials.PLEX_SERVER_ID, ratingKey=mediaItem.ratingKey,
-                              description="Watch it on {}".format(credentials.PLEX_SERVER_NAME)))
+    imdb_item = imdb.get_title(imdb.search_for_title(mediaItem.title)[0].imdb_id)
+    embed = None
+    if credentials.RETURN_PLEX_URL:
+        embed = discord.Embed(title=mediaItem.title,
+                              url=f"{credentials.PLEX_URL}/web/index.html#!/server/{credentials.PLEX_SERVER_ID}/details?key=%2Flibrary%2Fmetadata%2F{mediaItem.ratingKey}",
+                              description=f"Watch it on {credentials.PLEX_SERVER_NAME}")
+    else:
+        embed = discord.Embed(title=mediaItem.title,
+                              url=f"https://www.imdb.com/title/{imdb_item.imdb_id}",
+                              description=f"View on IMDb")
+    embed.add_field(name="Summary", value=imdb_item.plot_outline, inline=False)
+    embed.add_field(name="Release Date", value=imdb_item.release_date, inline=False)
     if mediaItem.type not in ['artist', 'album', 'track']:
-        embed = getPoster(embed, mediaItem.title)
+        try:
+            embed.set_image(url=str(imdb_item.image.url))
+        except:
+            pass
     return embed
 
 
@@ -102,12 +100,12 @@ def getHistory(username, sectionIDs):
             return "Error"
         watched_titles = []
         for sectionID in sectionIDs:
-            history = request('get_history', 'section_id={}&user_id={}&length=10000'.format(str(sectionID), user_id))
+            history = request('get_history', f'section_id={sectionID}&user_id={user_id}&length=10000')
             for watched_item in history['response']['data']['data']:
                 watched_titles.append(watched_item['full_title'])
         return watched_titles
     except Exception as e:
-        print("Error in getHistory: {}".format(e))
+        print(f"Error in getHistory: {e}")
         return "Error"
 
 
@@ -145,8 +143,8 @@ def findRec(username, mediaType, unwatched=False):
         else:
             return pickRandom(libraries[mediaType][1])
     except Exception as e:
-        print("Error in findRec: {}".format(e))
-        return False
+        print(f"Error in findRec: {e}")
+    return False
 
 
 def makeRecommendation(mediaType, unwatched, PlexUsername):
@@ -159,7 +157,7 @@ def makeRecommendation(mediaType, unwatched, PlexUsername):
     else:
         recommendation = findRec(None, mediaType, False)
     embed = makeEmbed(recommendation)
-    return "How about {}?".format(recommendation.title), embed, recommendation
+    return f"How about {recommendation.title}?", embed, recommendation
 
 
 def getPlayers(mediaType):
@@ -172,9 +170,9 @@ def getPlayers(mediaType):
     players_list = ""
     for player in players[:5]:
         num = num + 1
-        players_list = '{}\n{}:{}'.format(players_list, num, player.title)
+        players_list = f'{players_list}\n{num}:{player.title}'
         owner_players.append(player)
-    return '{}\nReact with which player you want to start this {} on.'.format(players_list, mediaType), num
+    return f'{players_list}\nReact with which player you want to start this {mediaType} on.', num
 
 
 def getFullMediaItem(mediaItem):
@@ -208,7 +206,7 @@ class PlexRecs(commands.Cog):
         if ctx.invoked_subcommand is None:
             if mediaType.lower() not in libraries.keys():
                 acceptedTypes = "', '".join(libraries.keys())
-                await ctx.send("Please try again, indicating '{}'".format(acceptedTypes))
+                await ctx.send(f"Please try again, indicating '{acceptedTypes}'")
             else:
                 holdMessage = await ctx.send(
                     "Looking for a{} {}...".format("n" if (mediaType[0] in ['a', 'e', 'i', 'o', 'u']) else "",
@@ -241,7 +239,7 @@ class PlexRecs(commands.Cog):
                                         playMedia(playerNumber, mediaItem)
                                     else:
                                         await ctx.send(
-                                            "Sorry, something went wrong while loading that {}.".format(mediaType))
+                                            f"Sorry, something went wrong while loading that {mediaType}.")
                             except asyncio.TimeoutError:
                                 await playerQuestion.delete()
                                 askAboutPlayer = False
@@ -264,9 +262,9 @@ class PlexRecs(commands.Cog):
                 break
         if not mediaType:
             acceptedTypes = "', '".join(libraries.keys())
-            await ctx.send("Please try again, indicating '{}'".format(acceptedTypes))
+            await ctx.send(f"Please try again, indicating '{acceptedTypes}'")
         else:
-            holdMessage = await ctx.send("Looking for a new {}...".format(mediaType))
+            holdMessage = await ctx.send(f"Looking for a new {mediaType}...")
             async with ctx.typing():
                 response, embed, mediaItem = makeRecommendation(mediaType, True, PlexUsername)
             await holdMessage.delete()
@@ -295,7 +293,7 @@ class PlexRecs(commands.Cog):
                                     playMedia(playerNumber, mediaItem)
                                 else:
                                     await ctx.send(
-                                        "Sorry, something went wrong while loading that {}.".format(mediaType))
+                                        f"Sorry, something went wrong while loading that {mediaType}.")
                         except asyncio.TimeoutError:
                             await playerQuestion.delete()
                             askAboutPlayer = False
