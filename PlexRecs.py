@@ -3,29 +3,41 @@ import discord
 from discord.ext import commands, tasks
 import credentials
 from plexapi.server import PlexServer
+from plexapi import exceptions as plex_exceptions
 import requests
 import json
 from imdbpie import ImdbFacade
 import random
 from progress.bar import Bar
+import logging
+
+logging.basicConfig(format='%(levelname)s:%(message)s', level=(logging.ERROR if credentials.SUPPRESS_LOGS else logging.INFO))
 
 plex = PlexServer(credentials.PLEX_URL, credentials.PLEX_TOKEN)
+logging.info("Connected to Plex.")
 
 imdb = ImdbFacade()
 
 libraries = {}
 for name, numbers in credentials.LIBRARIES.items():
     libraries[name] = [numbers, []]
+logging.info(f"Libraries: {libraries}")
 
 owner_players = []
 emoji_numbers = [u"1\u20e3", u"2\u20e3", u"3\u20e3", u"4\u20e3", u"5\u20e3"]
 
 
 def request(cmd, params):
-    url = f'{credentials.TAUTULLI_BASE_URL}/api/v2?apikey={credentials.TAUTULLI_API_KEY}&cmd={cmd}'
-    if params:
-        url = f'{credentials.TAUTULLI_BASE_URL}/api/v2?apikey={credentials.TAUTULLI_API_KEY}&{params}&cmd={cmd}'
-    return json.loads(requests.get(url).text)
+    try:
+        url = f'{credentials.TAUTULLI_BASE_URL}/api/v2?apikey={credentials.TAUTULLI_API_KEY}{"&" + str(params) if params else ""}&cmd={cmd}'
+        response = requests.get(url=url)
+        if response:
+            return response.json()
+    except json.JSONDecodeError as e:
+        logging.error(f'Response JSON is empty: {e}')
+    except ValueError as e:
+        logging.error(f'Response content is not valid JSON: {e}')
+    return None
 
 
 def cleanLibraries():
@@ -49,20 +61,29 @@ def makeLibrary(libraryName):
         if not libraries[libraryName][1]:
             for libraryNumber in libraries[libraryName][0]:
                 json_data = request("get_library", f"section_id={libraryNumber}")
-                count = json_data['response']['data']['count']
-                bar = Bar(f'Loading {libraryName} (Library section {libraryNumber})', max=int(count))
-                librarySection = plex.library.sectionByID(str(libraryNumber))
-                for item in librarySection.all():
-                    libraries[libraryName][1].append(
-                        SmallMediaItem(title=item.title, year=(None if librarySection.type == 'artist' else item.year),
-                                       ratingKey=item.ratingKey, librarySectionID=item.librarySectionID,
-                                       mediaType=item.type))
-                    bar.next()
-                bar.finish()
-            return True
-        return False
+                if json_data:
+                    count = json_data['response']['data']['count']
+                    bar = Bar(f'Loading {libraryName} (Library section {libraryNumber})', max=int(count))
+                    librarySection = plex.library.sectionByID(f"{libraryNumber}")
+                    for item in librarySection.all():
+                        try:
+                            libraries[libraryName][1].append(
+                               SmallMediaItem(title=item.title, year=(None if librarySection.type == 'artist' else item.year),
+                                              ratingKey=item.ratingKey, librarySectionID=item.librarySectionID,
+                                              mediaType=item.type))
+                        except plex_exceptions.PlexApiException as e:
+                            logging.error(f"Could not create SmallMediaItem for Plex library item: {e}")
+                        bar.next()
+                    bar.finish()
+                    return True
+                else:
+                    logging.error(f"Could not get JSON data to build {libraryName} library.")
+    except KeyError as e:
+        logging.error(f"Could not get section {libraryNumber} ({libraryName}) from the Plex Server: {e}")
+    except plex_exceptions.PlexApiException as e:
+        logging.error(f"Could not create SmallMediaItem from Plex library item: {e}")
     except Exception as e:
-        print(f'Error in makeLibrary: {e}')
+        logging.error(f'Error in makeLibrary: {e}')
     return False
 
 
@@ -96,7 +117,7 @@ def getHistory(username, sectionIDs):
                 user_id = user['user_id']
                 break
         if not user_id:
-            print("I couldn't find that username. Please check and try again.")
+            logging.error("I couldn't find that username. Please check and try again.")
             return "Error"
         watched_titles = []
         for sectionID in sectionIDs:
@@ -105,7 +126,7 @@ def getHistory(username, sectionIDs):
                 watched_titles.append(watched_item['full_title'])
         return watched_titles
     except Exception as e:
-        print(f"Error in getHistory: {e}")
+        logging.error(f"Error in getHistory: {e}")
         return "Error"
 
 
@@ -143,7 +164,7 @@ def findRec(username, mediaType, unwatched=False):
         else:
             return pickRandom(libraries[mediaType][1])
     except Exception as e:
-        print(f"Error in findRec: {e}")
+        logging.error(f"Error in findRec: {e}")
     return False
 
 
@@ -246,7 +267,7 @@ class PlexRecs(commands.Cog):
 
     @plex_rec.error
     async def plex_rec_error(self, ctx, error):
-        print(error)
+        logging.error(error)
         await ctx.send("Sorry, something went wrong while looking for a recommendation.")
 
     @plex_rec.command(name="new", aliases=['unwatched', 'unseen', 'unlistened'])
@@ -300,10 +321,10 @@ class PlexRecs(commands.Cog):
 
     @plex_rec_new.error
     async def plex_rec_new_error(self, ctx, error):
-        print(error)
+        logging.error(error)
         await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
 
     def __init__(self, bot):
         self.bot = bot
-        print("Updating Plex libraries...")
+        logging.info("Updating Plex libraries...")
         self.makeLibraries.start()
