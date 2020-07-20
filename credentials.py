@@ -34,3 +34,5 @@ DISCORD_BOT_TOKEN = ''
 OWNER_DISCORD_ID = ''
 
 BOT_PREFIX = '?'
+
+SUPPRESS_LOGS = True  # True - only show errors. False - show detailed info
