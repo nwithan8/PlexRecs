@@ -12,3 +12,14 @@ def get_imdb_item(title):
     except Exception as e:
         error(f"Could not get IMDb item: {e}")
     return None
+
+
+def build_ids_dict(ids):
+    ids_dict = {}
+    if ids.get('imdb'):
+        ids_dict['imdb'] = ids['imdb']
+    if ids.get('tvdb'):
+        ids_dict['thetvdb'] = ids['tvdb']
+    if ids.get('tmdb'):
+        ids_dict['themoviedb'] = ids['tmdb']
+    return ids_dict

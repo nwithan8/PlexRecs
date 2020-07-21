@@ -49,7 +49,8 @@ def pick_unwatched(history, mediaList, attempts: int = 0):
 def pick_from_trakt_list(trakt_list, plex_instance, genre: str = None, rating: float = None, above: bool = True, attempts: int = 0):
     temp_choice = pick_random(trakt_list)
     info(f"Choice from Trakt: {temp_choice.title}, {temp_choice.year}")
-    plex_equivalent = plex_instance.is_on_plex(title=temp_choice.title, year=temp_choice.year, exact_match=False)
+    external_ids = imdb.build_ids_dict(temp_choice.ids['ids'])
+    plex_equivalent = plex_instance.is_on_plex(title=temp_choice.title, year=temp_choice.year, external_ids=external_ids, match_rating_keys=False)
     if plex_equivalent:
         info(f"Match from Plex: {plex_equivalent.title}, {plex_equivalent.year}")
         return plex_equivalent

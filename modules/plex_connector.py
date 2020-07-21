@@ -6,16 +6,27 @@ import modules.tautulli_connector as tautulli
 
 
 class SmallMediaItem:
-    def __init__(self, title, year, ratingKey, librarySectionID, mediaType):
+    def __init__(self, title, year, ratingKey, librarySectionID, mediaType, external_ids=None):
         self.title = title
         self.year = year
         self.ratingKey = ratingKey
         self.librarySectionID = librarySectionID
         self.type = mediaType
+        self.external_ids = external_ids
 
 
-def search_for_item(library_section, title, year):
-    return library_section.search(title=title, year=[year])
+def search_for_item(library_section, title, year, external_ids=None):
+    matches = []
+    if external_ids:
+        if 'guid' not in library_section.ALLOWED_FILTERS:
+            library_section.ALLOWED_FILTERS += ('guid',)
+        for source_name, e_id in external_ids.items():
+            for item in library_section.search(guid=f"{source_name}://{e_id}"):
+                if item not in matches:
+                    matches.append(item)
+    else:
+        matches = library_section.search(title=title, year=[year])
+    return matches
 
 
 class PlexConnector:
@@ -109,17 +120,20 @@ class PlexConnector:
     def get_library_section(self, section_id):
         return self.server.library.sectionByID(f"{section_id}")
 
-    def getFullMediaItem(self, mediaItem, match_keys: bool = True):
+    def getFullMediaItem(self, mediaItem, external_ids=None, match_keys: bool = True):
+        if external_ids is None:
+            external_ids = []
         librarySection = self.get_library_section(section_id=mediaItem.librarySectionID)
-        for item in search_for_item(library_section=librarySection, title=mediaItem.title, year=mediaItem.year):
+        for item in search_for_item(library_section=librarySection, title=mediaItem.title, year=mediaItem.year,
+                                    external_ids=external_ids):
             if match_keys:
                 if item.ratingKey == mediaItem.ratingKey:
                     return item
             else:
-                return item
+                return item  # go with the first item in the list
         return None
 
-    def is_on_plex(self, title, year, section_id=None, section_name=None, exact_match: bool = False):
+    def is_on_plex(self, title, year, external_ids=None, section_id=None, section_name=None, match_rating_keys: bool = False):
         sections_ids_to_check = []
         if section_id:
             sections_ids_to_check.append(section_id)
@@ -133,8 +147,8 @@ class PlexConnector:
                     sections_ids_to_check.append(libraryNumber)
         for s_id in sections_ids_to_check:
             temp_media_item = SmallMediaItem(title=title, year=year, ratingKey=None,
-                                             librarySectionID=s_id, mediaType=None)
-            possible_match = self.getFullMediaItem(mediaItem=temp_media_item, match_keys=exact_match)
+                                             librarySectionID=s_id, mediaType=None, external_ids=external_ids)
+            possible_match = self.getFullMediaItem(mediaItem=temp_media_item, match_keys=match_rating_keys)
             if possible_match:
                 return possible_match
         return False
