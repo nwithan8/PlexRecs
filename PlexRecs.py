@@ -2,108 +2,24 @@ import asyncio
 import discord
 from discord.ext import commands, tasks
 import credentials
-from plexapi.server import PlexServer
-from plexapi import exceptions as plex_exceptions
-import requests
-import json
-from imdbpie import ImdbFacade
-import random
-from progress.bar import Bar
-import logging
 from typing import Union
 
-logging.basicConfig(format='%(levelname)s:%(message)s',
-                    level=(logging.ERROR if credentials.SUPPRESS_LOGS else logging.INFO))
+from modules.logs import *
+import modules.plex_connector as plex
+import modules.trakt_connector as trakt
+import modules.imdb_connector as imdb
+import modules.picker as picker
 
-plex = PlexServer(credentials.PLEX_URL, credentials.PLEX_TOKEN)
-logging.info("Connected to Plex.")
+plex = plex.PlexConnector(url=credentials.PLEX_URL, token=credentials.PLEX_TOKEN,
+                          server_id=credentials.PLEX_SERVER_ID, server_name=credentials.PLEX_SERVER_NAME,
+                          library_list=credentials.LIBRARIES, tautulli_url=credentials.TAUTULLI_BASE_URL,
+                          tautulli_key=credentials.TAUTULLI_API_KEY)
 
-imdb = ImdbFacade()
-
-libraries = {}
-for name, numbers in credentials.LIBRARIES.items():
-    libraries[name] = [numbers, []]
-logging.info(f"Libraries: {libraries}")
-
-owner_players = []
 emoji_numbers = [u"1\u20e3", u"2\u20e3", u"3\u20e3", u"4\u20e3", u"5\u20e3"]
 
 
-def get_imdb_item(title):
-    try:
-        search_results = imdb.search_for_title(title)
-        if search_results:
-            return imdb.get_title(search_results[0].imdb_id)
-    except Exception as e:
-        logging.error(f"Could not get IMDb item: {e}")
-    return None
-
-
-def request(cmd, params):
-    try:
-        url = f'{credentials.TAUTULLI_BASE_URL}/api/v2?apikey={credentials.TAUTULLI_API_KEY}{"&" + str(params) if params else ""}&cmd={cmd}'
-        response = requests.get(url=url)
-        if response:
-            return response.json()
-    except json.JSONDecodeError as e:
-        logging.error(f'Response JSON is empty: {e}')
-    except ValueError as e:
-        logging.error(f'Response content is not valid JSON: {e}')
-    return None
-
-
-def cleanLibraries():
-    global libraries
-    for groupName, items in libraries.items():
-        items[1].clear()
-
-
-class SmallMediaItem:
-    def __init__(self, title, year, ratingKey, librarySectionID, mediaType):
-        self.title = title
-        self.year = year
-        self.ratingKey = ratingKey
-        self.librarySectionID = librarySectionID
-        self.type = mediaType
-
-
-def makeLibrary(libraryName, attempts: int = 0):
-    try:
-        global libraries
-        if not libraries[libraryName][1]:
-            for libraryNumber in libraries[libraryName][0]:
-                json_data = request("get_library", f"section_id={libraryNumber}")
-                if json_data:
-                    count = json_data['response']['data']['count']
-                    bar = Bar(f'Loading {libraryName} (Library section {libraryNumber})', max=int(count))
-                    librarySection = plex.library.sectionByID(f"{libraryNumber}")
-                    for item in librarySection.all():
-                        try:
-                            libraries[libraryName][1].append(
-                                SmallMediaItem(title=item.title,
-                                               year=(None if librarySection.type == 'artist' else item.year),
-                                               ratingKey=item.ratingKey, librarySectionID=item.librarySectionID,
-                                               mediaType=item.type))
-                        except plex_exceptions.PlexApiException as e:
-                            logging.error(f"Could not create SmallMediaItem for Plex library item: {e}")
-                        bar.next()
-                    bar.finish()
-                    return True
-                else:
-                    logging.error(f"Could not get JSON data to build {libraryName} library.")
-    except KeyError as e:
-        logging.error(f"Could not get section {libraryNumber} ({libraryName}) from the Plex Server: {e}")
-    except plex_exceptions.PlexApiException as e:
-        logging.error(f"Could not create SmallMediaItem from Plex library item: {e}")
-    except Exception as e:
-        logging.error(f'Error in makeLibrary: {e}')
-        if attempts < 5:  # for generic errors, retry making the library
-            return makeLibrary(libraryName=libraryName, attempts=attempts+1)
-    return False
-
-
 def makeEmbed(mediaItem):
-    imdb_item = get_imdb_item(mediaItem.title)
+    imdb_item = imdb.get_imdb_item(mediaItem.title)
     embed = None
     if credentials.RETURN_PLEX_URL:
         embed = discord.Embed(title=mediaItem.title,
@@ -123,71 +39,6 @@ def makeEmbed(mediaItem):
     return embed
 
 
-def getHistory(username, sectionIDs):
-    try:
-        user_id = None
-        users = request('get_users', None)
-        for user in users['response']['data']:
-            if user['username'] == username:
-                user_id = user['user_id']
-                break
-        if not user_id:
-            logging.error("I couldn't find that username. Please check and try again.")
-            return "Error"
-        watched_titles = []
-        for sectionID in sectionIDs:
-            history = request('get_history', f'section_id={sectionID}&user_id={user_id}&length=10000')
-            for watched_item in history['response']['data']['data']:
-                watched_titles.append(watched_item['full_title'])
-        return watched_titles
-    except Exception as e:
-        logging.error(f"Error in getHistory: {e}")
-        return "Error"
-
-
-def rating_is_correct(item, rating: float, above: bool = True):
-    if not item.rating:
-        return False
-    elif above and item.rating < rating:  # want above and temp_choice is not above rating
-        return False
-    elif not above and item.rating > rating:  # want below and temp_choice is not below rating
-        return False
-    return True
-
-
-def pickWithRating(aList, rating: float, above: bool = True, attempts: int = 0):
-    temp_choice = pickRandom(aList)
-    imdb_item = get_imdb_item(temp_choice.title)
-    logging.info(f"IMDb item: {imdb_item.title}; Rating: {imdb_item.rating}")
-    if not rating_is_correct(item=imdb_item, rating=rating, above=above):
-        if attempts > 10:  # give up after ten failures
-            return "Too many attempts"
-        return pickWithRating(aList=aList, rating=rating, above=above, attempts=attempts + 1)
-    return temp_choice
-
-
-def pickUnwatched(history, mediaList, attempts: int = 0):
-    """
-    Keep picking until something is unwatched
-    :param attempts:
-    :param history:
-    :param mediaList: Movies list, Shows list or Artists list
-    :return: SmallMediaItem object
-    """
-    if history == "Error":
-        return False
-    choice = random.choice(mediaList)
-    if choice.title in history:
-        if attempts > 10:  # give up after ten failures
-            return "Too many attempts"
-        return pickUnwatched(history, mediaList, attempts=attempts + 1)
-    return choice
-
-
-def pickRandom(aList):
-    return random.choice(aList)
-
-
 def findRec(mediaType: str = None, unwatched: bool = False, username: str = None, rating: float = None,
             above: bool = True):
     """
@@ -201,14 +52,15 @@ def findRec(mediaType: str = None, unwatched: bool = False, username: str = None
     """
     try:
         if unwatched:
-            return pickUnwatched(history=getHistory(username, libraries[mediaType][0]),
-                                 mediaList=libraries[mediaType][1])
+            return picker.pick_unwatched(
+                history=plex.get_user_history(username=username, sectionIDs=plex.libraries[mediaType][0]),
+                mediaList=plex.libraries[mediaType][1])
         elif rating:
-            return pickWithRating(aList=libraries[mediaType][1], rating=rating, above=above)
+            return picker.pick_with_rating(aList=plex.libraries[mediaType][1], rating=rating, above=above)
         else:
-            return pickRandom(aList=libraries[mediaType][1])
+            return picker.pick_random(aList=plex.libraries[mediaType][1])
     except Exception as e:
-        logging.error(f"Error in findRec: {e}")
+        error(f"Error in findRec: {e}")
     return False
 
 
@@ -232,38 +84,11 @@ def makeRecommendation(mediaType, unwatched: bool = False, PlexUsername: str = N
     return f"How about {recommendation.title}?", embed, recommendation
 
 
-def getPlayers(mediaType):
-    global owner_players
-    owner_players = []
-    players = plex.clients()
-    if not players:
-        return False, 0
-    num = 0
-    players_list = ""
-    for player in players[:5]:
-        num = num + 1
-        players_list = f'{players_list}\n{num}:{player.title}'
-        owner_players.append(player)
-    return f'{players_list}\nReact with which player you want to start this {mediaType} on.', num
-
-
-def getFullMediaItem(mediaItem):
-    librarySection = plex.library.sectionByID(mediaItem.librarySectionID)
-    for item in librarySection.search(title=mediaItem.title, year=[mediaItem.year]):
-        if item.ratingKey == mediaItem.ratingKey:
-            return item
-    return None
-
-
-def playMedia(playerNumber, mediaItem):
-    owner_players[playerNumber].goToMedia(mediaItem)
-
-
 class PlexRecs(commands.Cog):
 
     async def userResponse(self, ctx, mediaType, mediaItem):
         if str(ctx.message.author.id) == str(credentials.OWNER_DISCORD_ID):
-            response, numberOfPlayers = getPlayers(mediaType)
+            response, numberOfPlayers = plex.get_available_players(mediaType=mediaType)
             if response:
                 askAboutPlayer = True
                 while askAboutPlayer:
@@ -278,9 +103,9 @@ class PlexRecs(commands.Cog):
                         reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check)
                         if reaction:
                             playerNumber = emoji_numbers.index(str(reaction.emoji))
-                            mediaItem = getFullMediaItem(mediaItem)
+                            mediaItem = plex.getFullMediaItem(mediaItem)
                             if mediaItem:
-                                playMedia(playerNumber, mediaItem)
+                                plex.playMedia(playerNumber, mediaItem)
                             else:
                                 await ctx.send(
                                     f"Sorry, something went wrong while loading that {mediaType}.")
@@ -290,9 +115,7 @@ class PlexRecs(commands.Cog):
 
     @tasks.loop(minutes=60.0)  # update library every hour
     async def makeLibraries(self):
-        cleanLibraries()
-        for groupName in libraries.keys():
-            makeLibrary(groupName)
+        plex.make_libraries()
 
     @commands.group(aliases=['recommend', 'suggest', 'rec', 'sugg'], pass_context=True)
     async def plex_rec(self, ctx: commands.Context, mediaType: str):
@@ -304,8 +127,8 @@ class PlexRecs(commands.Cog):
         Use 'rec <mediaType> above/below <rating>' for a movie above/below a certain IMDb score.
         """
         if ctx.invoked_subcommand is None:
-            if mediaType.lower() not in libraries.keys():
-                acceptedTypes = "', '".join(libraries.keys())
+            if mediaType.lower() not in plex.libraries.keys():
+                acceptedTypes = "', '".join(plex.libraries.keys())
                 await ctx.send(f"Please try again, indicating '{acceptedTypes}'")
             else:
                 holdMessage = await ctx.send(
@@ -321,8 +144,8 @@ class PlexRecs(commands.Cog):
                 await self.userResponse(ctx=ctx, mediaType=mediaType, mediaItem=mediaItem)
 
     @plex_rec.error
-    async def plex_rec_error(self, ctx, error):
-        logging.error(error)
+    async def plex_rec_error(self, ctx, error_msg):
+        error(error_msg)
         await ctx.send("Sorry, something went wrong while looking for a recommendation.")
 
     @plex_rec.command(name="new", aliases=['unwatched', 'unseen', 'unlistened'])
@@ -332,12 +155,12 @@ class PlexRecs(commands.Cog):
         Include your Plex username
         """
         mediaType = None
-        for group in libraries.keys():
+        for group in plex.libraries.keys():
             if group in ctx.message.content:
                 mediaType = group
                 break
         if not mediaType:
-            acceptedTypes = "', '".join(libraries.keys())
+            acceptedTypes = "', '".join(plex.libraries.keys())
             await ctx.send(f"Please try again, indicating '{acceptedTypes}'")
         else:
             holdMessage = await ctx.send(f"Looking for a new {mediaType}...")
@@ -351,8 +174,8 @@ class PlexRecs(commands.Cog):
             await self.userResponse(ctx=ctx, mediaType=mediaType, mediaItem=mediaItem)
 
     @plex_rec_new.error
-    async def plex_rec_new_error(self, ctx, error):
-        logging.error(error)
+    async def plex_rec_new_error(self, ctx, error_msg):
+        error(error_msg)
         await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
 
     @plex_rec.command(name="above", aliases=['over', 'better'])
@@ -362,7 +185,7 @@ class PlexRecs(commands.Cog):
         Include your rating
         """
         mediaType = None
-        for group in libraries.keys():
+        for group in plex.libraries.keys():
             if group in ctx.message.content:
                 mediaType = group
                 break
@@ -380,8 +203,8 @@ class PlexRecs(commands.Cog):
             await self.userResponse(ctx=ctx, mediaType=mediaType, mediaItem=mediaItem)
 
     @plex_rec_above.error
-    async def plex_rec_above_error(self, ctx, error):
-        logging.error(error)
+    async def plex_rec_above_error(self, ctx, error_msg):
+        error(error_msg)
         await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
 
     @plex_rec.command(name="below", aliases=['under', 'worse'])
@@ -391,7 +214,7 @@ class PlexRecs(commands.Cog):
         Include your rating
         """
         mediaType = None
-        for group in libraries.keys():
+        for group in plex.libraries.keys():
             if group in ctx.message.content:
                 mediaType = group
                 break
@@ -409,11 +232,15 @@ class PlexRecs(commands.Cog):
             await self.userResponse(ctx=ctx, mediaType=mediaType, mediaItem=mediaItem)
 
     @plex_rec_below.error
-    async def plex_rec_below_error(self, ctx, error):
-        logging.error(error)
+    async def plex_rec_below_error(self, ctx, error_msg):
+        error(error_msg)
         await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
 
     def __init__(self, bot):
         self.bot = bot
-        logging.info("Updating Plex libraries...")
+        info("Updating Plex libraries...")
         self.makeLibraries.start()
+
+
+def setup(bot):
+    bot.add_cog(PlexRecs(bot))

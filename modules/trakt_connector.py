@@ -1,0 +1,1 @@
+from modules.logs import info, error
