@@ -67,7 +67,7 @@ class SmallMediaItem:
         self.type = mediaType
 
 
-def makeLibrary(libraryName):
+def makeLibrary(libraryName, attempts: int = 0):
     try:
         global libraries
         if not libraries[libraryName][1]:
@@ -97,6 +97,8 @@ def makeLibrary(libraryName):
         logging.error(f"Could not create SmallMediaItem from Plex library item: {e}")
     except Exception as e:
         logging.error(f'Error in makeLibrary: {e}')
+        if attempts < 5:  # for generic errors, retry making the library
+            return makeLibrary(libraryName=libraryName, attempts=attempts+1)
     return False
 
 
@@ -143,15 +145,21 @@ def getHistory(username, sectionIDs):
         return "Error"
 
 
+def rating_is_correct(item, rating: float, above: bool = True):
+    if not item.rating:
+        return False
+    elif above and item.rating < rating:  # want above and temp_choice is not above rating
+        return False
+    elif not above and item.rating > rating:  # want below and temp_choice is not below rating
+        return False
+    return True
+
+
 def pickWithRating(aList, rating: float, above: bool = True, attempts: int = 0):
     temp_choice = pickRandom(aList)
     imdb_item = get_imdb_item(temp_choice.title)
     logging.info(f"IMDb item: {imdb_item.title}; Rating: {imdb_item.rating}")
-    if above and imdb_item.rating < rating:  # want above and temp_choice is not above rating, repick
-        if attempts > 10:  # give up after ten failures
-            return "Too many attempts"
-        return pickWithRating(aList=aList, rating=rating, above=above, attempts=attempts + 1)
-    elif not above and imdb_item.rating > rating:  # want below and temp_choice is not below rating, repick
+    if not rating_is_correct(item=imdb_item, rating=rating, above=above):
         if attempts > 10:  # give up after ten failures
             return "Too many attempts"
         return pickWithRating(aList=aList, rating=rating, above=above, attempts=attempts + 1)
