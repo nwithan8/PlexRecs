@@ -5,15 +5,20 @@ import credentials
 from typing import Union
 
 from modules.logs import *
-import modules.plex_connector as plex
-import modules.trakt_connector as trakt
+import modules.plex_connector as plex_connector
+import modules.trakt_connector as trakt_connector
 import modules.imdb_connector as imdb
 import modules.picker as picker
 
-plex = plex.PlexConnector(url=credentials.PLEX_URL, token=credentials.PLEX_TOKEN,
-                          server_id=credentials.PLEX_SERVER_ID, server_name=credentials.PLEX_SERVER_NAME,
-                          library_list=credentials.LIBRARIES, tautulli_url=credentials.TAUTULLI_BASE_URL,
-                          tautulli_key=credentials.TAUTULLI_API_KEY)
+plex = plex_connector.PlexConnector(url=credentials.PLEX_URL, token=credentials.PLEX_TOKEN,
+                                    server_id=credentials.PLEX_SERVER_ID, server_name=credentials.PLEX_SERVER_NAME,
+                                    library_list=credentials.LIBRARIES, tautulli_url=credentials.TAUTULLI_BASE_URL,
+                                    tautulli_key=credentials.TAUTULLI_API_KEY)
+
+trakt = trakt_connector.TraktConnector(username=credentials.TRAKT_USERNAME,
+                                       client_id=credentials.TRAKT_CLIENT_ID,
+                                       client_secret=credentials.TRAKT_CLIENT_SECRET)
+trakt.store_public_lists(lists_dict=credentials.TRAKT_LISTS)
 
 emoji_numbers = [u"1\u20e3", u"2\u20e3", u"3\u20e3", u"4\u20e3", u"5\u20e3"]
 
@@ -40,9 +45,10 @@ def makeEmbed(mediaItem):
 
 
 def findRec(mediaType: str = None, unwatched: bool = False, username: str = None, rating: float = None,
-            above: bool = True):
+            above: bool = True, trakt_list_name: str = None, attempts: int = 0):
     """
 
+    :param trakt_list_name:
     :param above:
     :param rating:
     :param username:
@@ -57,6 +63,9 @@ def findRec(mediaType: str = None, unwatched: bool = False, username: str = None
                 mediaList=plex.libraries[mediaType][1])
         elif rating:
             return picker.pick_with_rating(aList=plex.libraries[mediaType][1], rating=rating, above=above)
+        elif trakt_list_name:
+            trakt_list = trakt.get_list_items(list_name=trakt_list_name)
+            return picker.pick_from_trakt_list(trakt_list=trakt_list, plex_instance=plex)
         else:
             return picker.pick_random(aList=plex.libraries[mediaType][1])
     except Exception as e:
@@ -65,7 +74,7 @@ def findRec(mediaType: str = None, unwatched: bool = False, username: str = None
 
 
 def makeRecommendation(mediaType, unwatched: bool = False, PlexUsername: str = None, rating: float = None,
-                       above: bool = True):
+                       above: bool = True, trakt_list_name: str = None):
     if unwatched:
         if not PlexUsername:
             return "Please include a Plex username"
@@ -76,6 +85,10 @@ def makeRecommendation(mediaType, unwatched: bool = False, PlexUsername: str = N
             return "Sorry, it took too long to find something for you", None, None
     elif rating:
         recommendation = findRec(mediaType=mediaType, rating=rating, above=above)
+        if recommendation == "Too many attempts":
+            return "Sorry, it took too long to find something for you", None, None
+    elif trakt_list_name:
+        recommendation = findRec(mediaType=mediaType, trakt_list_name=trakt_list_name)
         if recommendation == "Too many attempts":
             return "Sorry, it took too long to find something for you", None, None
     else:
@@ -233,6 +246,37 @@ class PlexRecs(commands.Cog):
 
     @plex_rec_below.error
     async def plex_rec_below_error(self, ctx, error_msg):
+        error(error_msg)
+        await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
+
+    @plex_rec.command(name="trakt")
+    async def plex_rec_trakt(self, ctx: commands.Context, *, list_name: str):
+        """
+        Get a movie or show from a specific Trakt.tv list
+
+        Heads up: Large Trakt list may take a while to parse, and your request may time out.
+        Once a choice is made from Trakt, the item is searched for in your Plex library. False matches are possible.
+        """
+        mediaType = None
+        for group in plex.libraries.keys():
+            if group in ctx.message.content:
+                mediaType = group
+                break
+        if not mediaType or mediaType not in ['movie', 'show']:
+            await ctx.send(f"Sorry, this feature only works for movies and TV shows.")
+        else:
+            holdMessage = await ctx.send(f"Looking for a {mediaType} from the '{list_name}' list on Trakt.tv")
+            async with ctx.typing():
+                response, embed, mediaItem = makeRecommendation(mediaType=mediaType, trakt_list_name=list_name)
+            await holdMessage.delete()
+            if embed is not None:
+                await ctx.send(response, embed=embed)
+            else:
+                await ctx.send(response)
+            await self.userResponse(ctx=ctx, mediaType=mediaType, mediaItem=mediaItem)
+
+    @plex_rec_trakt.error
+    async def plex_rec_trakt_error(self, ctx, error_msg):
         error(error_msg)
         await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
 

@@ -3,3 +3,5 @@ requests
 progress
 PlexAPI
 asyncio
+trakt
+imdbpie

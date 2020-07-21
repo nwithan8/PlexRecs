@@ -107,7 +107,7 @@ class PlexConnector:
         self.owner_players[playerNumber].goToMedia(mediaItem)
 
     def get_library_section(self, section_id):
-        return self.server.library.sectionByID(section_id)
+        return self.server.library.sectionByID(f"{section_id}")
 
     def getFullMediaItem(self, mediaItem, match_keys: bool = True):
         librarySection = self.get_library_section(section_id=mediaItem.librarySectionID)
@@ -119,7 +119,7 @@ class PlexConnector:
                 return item
         return None
 
-    def is_on_plex(self, title, year, section_id=None, section_name=None):
+    def is_on_plex(self, title, year, section_id=None, section_name=None, exact_match: bool = False):
         sections_ids_to_check = []
         if section_id:
             sections_ids_to_check.append(section_id)
@@ -128,14 +128,13 @@ class PlexConnector:
             if section:
                 sections_ids_to_check.append(section.key)
         if not sections_ids_to_check:
-            for user_defined_section in self.libraries:
-                for libraryNumber in user_defined_section[0]:
+            for name, ids in self.libraries.items():
+                for libraryNumber in ids[0]:
                     sections_ids_to_check.append(libraryNumber)
         for s_id in sections_ids_to_check:
             temp_media_item = SmallMediaItem(title=title, year=year, ratingKey=None,
                                              librarySectionID=s_id, mediaType=None)
-            possible_match = self.getFullMediaItem(mediaItem=temp_media_item, match_keys=False)
+            possible_match = self.getFullMediaItem(mediaItem=temp_media_item, match_keys=exact_match)
             if possible_match:
                 return possible_match
         return False
-
