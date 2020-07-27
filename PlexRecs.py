@@ -11,7 +11,7 @@ import modules.imdb_connector as imdb
 import modules.picker as picker
 
 plex = plex_connector.PlexConnector(url=credentials.PLEX_URL, token=credentials.PLEX_TOKEN,
-                                    server_id=credentials.PLEX_SERVER_ID, server_name=credentials.PLEX_SERVER_NAME,
+                                    server_name=credentials.PLEX_SERVER_NAME,
                                     library_list=credentials.LIBRARIES, tautulli_url=credentials.TAUTULLI_BASE_URL,
                                     tautulli_key=credentials.TAUTULLI_API_KEY)
 
@@ -28,7 +28,7 @@ def makeEmbed(mediaItem):
     embed = None
     if credentials.RETURN_PLEX_URL:
         embed = discord.Embed(title=mediaItem.title,
-                              url=f"{credentials.PLEX_URL}/web/index.html#!/server/{credentials.PLEX_SERVER_ID}/details?key=%2Flibrary%2Fmetadata%2F{mediaItem.ratingKey}",
+                              url=f"{credentials.PLEX_URL}/web/index.html#!/server/{plex.server_id}/details?key=%2Flibrary%2Fmetadata%2F{mediaItem.ratingKey}",
                               description=f"Watch it on {credentials.PLEX_SERVER_NAME}")
     else:
         embed = discord.Embed(title=mediaItem.title,

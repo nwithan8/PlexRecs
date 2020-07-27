@@ -30,12 +30,12 @@ def search_for_item(library_section, title, year, external_ids=None):
 
 
 class PlexConnector:
-    def __init__(self, url, token, server_id, server_name, library_list, tautulli_url, tautulli_key):
+    def __init__(self, url, token, server_name, library_list, tautulli_url, tautulli_key):
         self.url = url
         self.token = token
-        self.server_id = server_id
         self.name = server_name
         self.server = PlexServer(self.url, self.token)
+        self.server_id = self.server.machineIdentifier
         info("Connected to Plex.")
         self.tautulli = None
         self.tautulli_url = tautulli_url
@@ -132,6 +132,9 @@ class PlexConnector:
             else:
                 return item  # go with the first item in the list
         return None
+
+    def get_server_id(self):
+        return self.server.machineIdentifier
 
     def is_on_plex(self, title, year, external_ids=None, section_id=None, section_name=None, match_rating_keys: bool = False):
         sections_ids_to_check = []

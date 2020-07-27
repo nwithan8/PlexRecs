@@ -1,6 +1,5 @@
 PLEX_URL = ""
 PLEX_TOKEN = ""
-PLEX_SERVER_ID = ""  # after "/server/" in browser UI URL
 PLEX_SERVER_NAME = ""
 
 # http://[PMS_IP_Address]:32400/library/sections?X-Plex-Token=YourTokenGoesHere
