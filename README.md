@@ -22,6 +22,24 @@ In addition to a recommendation, the owner of the Plex Server (whoever has the O
 
 Due to security limitations in the Plex API, this option is only available for the user currently logged into Plex (in this case, the Plex server administrator).
 
+# Analytics
+PlexRecs uses Google Analytics to collect statistics about usage to help me identity common errors, as well as what features are used most often to help guide and focus future development. **This data is limited, anonymous, and never sold or redistributed.**
+
+**When and what data is collected?**
+- Whenever the bot comes online
+	- What operating system the bot is running on (Windows, Linux, MacOS, etc.)
+- Whenever an error is logged
+	- What Python function the error occurred in.
+- Whenever a recommendation is successfully made
+	- What type of recommendation (regular, new, IMDb rating, from Trakt list) was made.
+	- NO DETAILS about the recommended item are transmitted
+	
+**What data is NOT collected:**
+- Any identifying information about the user
+- Any identifying information about the computer/machine (a random ID is generated on each analytics call, IP addresses are anonymized)
+- Settings for Discord, Plex, Tautulli or Trakt, including passwords, API tokens, URLs, etc.
+- Anything typed in Discord.
+
 # Contact
 Please leave a pull request if you would like to contribute.
 
