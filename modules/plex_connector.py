@@ -30,12 +30,13 @@ def search_for_item(library_section, title, year, external_ids=None):
 
 
 class PlexConnector:
-    def __init__(self, url, token, server_name, library_list, tautulli_url, tautulli_key):
+    def __init__(self, url, token, server_name, library_list, tautulli_url, tautulli_key, analytics):
         self.url = url
         self.token = token
         self.name = server_name
         self.server = PlexServer(self.url, self.token)
         self.server_id = self.server.machineIdentifier
+        self.analytics = analytics
         info("Connected to Plex.")
         self.tautulli = None
         self.tautulli_url = tautulli_url
@@ -46,8 +47,12 @@ class PlexConnector:
         self.initialize_library(library_list=library_list)
         self.owner_players = []
 
+    def _error_and_analytics(self, error_message, function_name):
+        error(error_message)
+        self.analytics.event(event_category="Error", event_action=function_name, random_uuid_if_needed=True)
+
     def make_tautulli_connector(self):
-        self.tautulli = tautulli.TautulliConnector(url=self.tautulli_url, api_key=self.tautulli_key)
+        self.tautulli = tautulli.TautulliConnector(url=self.tautulli_url, api_key=self.tautulli_key, analytics=self.analytics)
 
     def initialize_library(self, library_list):
         for name, numbers in library_list.items():
@@ -75,18 +80,18 @@ class PlexConnector:
                                                    ratingKey=item.ratingKey, librarySectionID=item.librarySectionID,
                                                    mediaType=item.type))
                             except plex_exceptions.PlexApiException as e:
-                                error(f"Could not create SmallMediaItem for Plex library item: {e}")
+                                self._error_and_analytics(error_message=f"Could not create SmallMediaItem for Plex library item: {e}", function_name='make_library (smallMediaItem internal)')
                             bar.next()
                         bar.finish()
                         return True
                     else:
-                        error(f"Could not get JSON data to build {libraryName} library.")
+                        self._error_and_analytics(error_message=f"Could not get JSON data to build {libraryName} library.", function_name='make_library (JSONError)')
         except KeyError as e:
-            error(f"Could not get section {libraryNumber} ({libraryName}) from the Plex Server: {e}")
+            self._error_and_analytics(error_message=f"Could not get section {libraryNumber} ({libraryName}) from the Plex Server: {e}", function_name='make_library (KeyError)')
         except plex_exceptions.PlexApiException as e:
-            error(f"Could not create SmallMediaItem from Plex library item: {e}")
+            self._error_and_analytics(error_message=f"Could not create SmallMediaItem from Plex library item: {e}", function_name='make_library (PlexApiException)')
         except Exception as e:
-            error(f'Error in makeLibrary: {e}')
+            self._error_and_analytics(error_message=f'Error in makeLibrary: {e}', function_name='make_library (general)')
             if attempts < 5:  # for generic errors, retry making the library
                 return self.make_library(libraryName=libraryName, attempts=attempts + 1)
         return False
@@ -99,7 +104,7 @@ class PlexConnector:
             self.make_library(libraryName=groupName)
 
     def get_user_history(self, username, sectionIDs):
-        return self.tautulli.get_user_history(self, username, sectionIDs)
+        return self.tautulli.get_user_history(username=username, sectionIDs=sectionIDs)
 
     def get_available_players(self, mediaType):
         self.owner_players = []

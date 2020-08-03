@@ -4,9 +4,14 @@ from modules.logs import *
 
 
 class TautulliConnector:
-    def __init__(self, url, api_key):
+    def __init__(self, url, api_key, analytics):
         self.url = url
         self.api_key = api_key
+        self.analytics = analytics
+
+    def _error_and_analytics(self, error_message, function_name):
+        error(error_message)
+        self.analytics.event(event_category="Error", event_action=function_name, random_uuid_if_needed=True)
 
     def api_call_get(self, cmd, params=None):
         try:
@@ -15,9 +20,9 @@ class TautulliConnector:
             if response:
                 return response.json()
         except json.JSONDecodeError as e:
-            error(f'Response JSON is empty: {e}')
+            self._error_and_analytics(error_message=f'Response JSON is empty: {e}', function_name='api_call_get (JSONDecodeError)')
         except ValueError as e:
-            error(f'Response content is not valid JSON: {e}')
+            self._error_and_analytics(error_message=f'Response content is not valid JSON: {e}', function_name='api_call_get (ValueError)')
         return None
 
     def get_user_history(self, username, sectionIDs):
@@ -29,7 +34,7 @@ class TautulliConnector:
                     user_id = user['user_id']
                     break
             if not user_id:
-                error("I couldn't find that username. Please check and try again.")
+                self._error_and_analytics(error_message="I couldn't find that username. Please check and try again.", function_name='get_user_history (No User ID)')
                 return "Error"
             watched_titles = []
             for sectionID in sectionIDs:
@@ -38,5 +43,5 @@ class TautulliConnector:
                     watched_titles.append(watched_item['full_title'])
             return watched_titles
         except Exception as e:
-            error(f"Error in getHistory: {e}")
+            self._error_and_analytics(error_message=f"Error in getHistory: {e}", function_name='get_user_history (general)')
         return "Error"

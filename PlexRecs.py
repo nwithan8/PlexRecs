@@ -2,6 +2,7 @@ import asyncio
 import discord
 from discord.ext import commands, tasks
 import credentials
+import sys
 from typing import Union
 
 from modules.logs import *
@@ -9,22 +10,31 @@ import modules.plex_connector as plex_connector
 import modules.trakt_connector as trakt_connector
 import modules.imdb_connector as imdb
 import modules.picker as picker
+import modules.analytics as GA
+
+analytics = GA.GoogleAnalytics(analytics_id='UA-174268200-1', anonymous_ip=True,
+                               do_not_track=not credentials.ALLOW_ANALYTICS)
 
 plex = plex_connector.PlexConnector(url=credentials.PLEX_URL, token=credentials.PLEX_TOKEN,
                                     server_name=credentials.PLEX_SERVER_NAME,
                                     library_list=credentials.LIBRARIES, tautulli_url=credentials.TAUTULLI_BASE_URL,
-                                    tautulli_key=credentials.TAUTULLI_API_KEY)
+                                    tautulli_key=credentials.TAUTULLI_API_KEY, analytics=analytics)
 
 trakt = trakt_connector.TraktConnector(username=credentials.TRAKT_USERNAME,
                                        client_id=credentials.TRAKT_CLIENT_ID,
-                                       client_secret=credentials.TRAKT_CLIENT_SECRET)
+                                       client_secret=credentials.TRAKT_CLIENT_SECRET, analytics=analytics)
 trakt.store_public_lists(lists_dict=credentials.TRAKT_LISTS)
 
 emoji_numbers = [u"1\u20e3", u"2\u20e3", u"3\u20e3", u"4\u20e3", u"5\u20e3"]
 
 
+def error_and_analytics(error_message, function_name):
+    error(error_message)
+    analytics.event(event_category="Error", event_action=function_name, random_uuid_if_needed=True)
+
+
 def makeEmbed(mediaItem):
-    imdb_item = imdb.get_imdb_item(mediaItem.title)
+    imdb_item = imdb.get_imdb_item(mediaItem.title, analytics=analytics)
     embed = None
     if credentials.RETURN_PLEX_URL:
         embed = discord.Embed(title=mediaItem.title,
@@ -48,6 +58,7 @@ def findRec(mediaType: str = None, unwatched: bool = False, username: str = None
             above: bool = True, trakt_list_name: str = None, attempts: int = 0):
     """
 
+    :param attempts:
     :param trakt_list_name:
     :param above:
     :param rating:
@@ -69,7 +80,7 @@ def findRec(mediaType: str = None, unwatched: bool = False, username: str = None
         else:
             return picker.pick_random(aList=plex.libraries[mediaType][1])
     except Exception as e:
-        error(f"Error in findRec: {e}")
+        error_and_analytics(error_message=f"Error in findRec: {e}", function_name='findRec')
     return False
 
 
@@ -155,10 +166,11 @@ class PlexRecs(commands.Cog):
                 else:
                     await ctx.send(response)
                 await self.userResponse(ctx=ctx, mediaType=mediaType, mediaItem=mediaItem)
+                analytics.event(event_category="Rec", event_action="Successful rec")
 
     @plex_rec.error
     async def plex_rec_error(self, ctx, error_msg):
-        error(error_msg)
+        error_and_analytics(error_message=error_msg, function_name='plex_rec')
         await ctx.send("Sorry, something went wrong while looking for a recommendation.")
 
     @plex_rec.command(name="new", aliases=['unwatched', 'unseen', 'unlistened'])
@@ -184,11 +196,12 @@ class PlexRecs(commands.Cog):
                 await ctx.send(response, embed=embed)
             else:
                 await ctx.send(response)
+            analytics.event(event_category="Rec", event_action="Successful new rec")
             await self.userResponse(ctx=ctx, mediaType=mediaType, mediaItem=mediaItem)
 
     @plex_rec_new.error
     async def plex_rec_new_error(self, ctx, error_msg):
-        error(error_msg)
+        error_and_analytics(error_message=error_msg, function_name='plex_rec_new')
         await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
 
     @plex_rec.command(name="above", aliases=['over', 'better'])
@@ -213,11 +226,12 @@ class PlexRecs(commands.Cog):
                 await ctx.send(response, embed=embed)
             else:
                 await ctx.send(response)
+            analytics.event(event_category="Rec", event_action="Successful IMDb above rec")
             await self.userResponse(ctx=ctx, mediaType=mediaType, mediaItem=mediaItem)
 
     @plex_rec_above.error
     async def plex_rec_above_error(self, ctx, error_msg):
-        error(error_msg)
+        error_and_analytics(error_message=error_msg, function_name='plex_rec_above')
         await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
 
     @plex_rec.command(name="below", aliases=['under', 'worse'])
@@ -242,11 +256,12 @@ class PlexRecs(commands.Cog):
                 await ctx.send(response, embed=embed)
             else:
                 await ctx.send(response)
+            analytics.event(event_category="Rec", event_action="Successful IMDb below rec")
             await self.userResponse(ctx=ctx, mediaType=mediaType, mediaItem=mediaItem)
 
     @plex_rec_below.error
     async def plex_rec_below_error(self, ctx, error_msg):
-        error(error_msg)
+        error_and_analytics(error_message=error_msg, function_name='plex_rec_below')
         await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
 
     @plex_rec.command(name="trakt")
@@ -273,15 +288,17 @@ class PlexRecs(commands.Cog):
                 await ctx.send(response, embed=embed)
             else:
                 await ctx.send(response)
+            analytics.event(event_category="Rec", event_action="Successful Trakt rec")
             await self.userResponse(ctx=ctx, mediaType=mediaType, mediaItem=mediaItem)
 
     @plex_rec_trakt.error
     async def plex_rec_trakt_error(self, ctx, error_msg):
-        error(error_msg)
+        error_and_analytics(error_message=error_msg, function_name='plex_rec_trakt')
         await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
 
     def __init__(self, bot):
         self.bot = bot
+        analytics.event(event_category="Platform", event_action=sys.platform)
         info("Updating Plex libraries...")
         self.makeLibraries.start()
 

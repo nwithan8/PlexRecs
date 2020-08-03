@@ -4,13 +4,14 @@ from modules.logs import *
 imdb = ImdbFacade()
 
 
-def get_imdb_item(title):
+def get_imdb_item(title, analytics):
     try:
         search_results = imdb.search_for_title(title)
         if search_results:
             return imdb.get_title(search_results[0].imdb_id)
     except Exception as e:
         error(f"Could not get IMDb item: {e}")
+        analytics.event(event_category="Error", event_action='get_imdb_item', random_uuid_if_needed=True)
     return None
 
 

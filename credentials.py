@@ -45,3 +45,27 @@ TRAKT_LISTS = {
     'username2': ['list_name_3'],
     'username3': ['list_name_4']
 }
+
+"""
+PlexRecs uses Google Analytics to collect statistics about usage to help me identity common errors, as well as what 
+features are used most often to help guide and focus future development.
+This data is limited, anonymous, and never sold or redistributed.
+
+When and what data is collected?
+    - Whenever the bot comes online
+        - What operating system the bot is running on (Windows, Linux, MacOS, etc.)
+    - Whenever an error is logged
+        - What Python function the error occurred in.
+    - Whenever a recommendation is successfully made
+        - What type of recommendation (regular, new, IMDb rating, from Trakt list) was made.
+        - NO DETAILS about the recommended item are transmitted
+
+What data is NOT collected:
+- Any identifying information about the user
+- Any identifying information about the computer/machine (a random ID is generated on each analytics call, IP addresses are anonymized)
+- Settings for Discord, Plex, Tautulli or Trakt, including passwords, API tokens, URLs, etc.
+- Anything typed in Discord.
+
+If you would like to opt-out of analytics, change True below to False
+"""
+ALLOW_ANALYTICS = True
