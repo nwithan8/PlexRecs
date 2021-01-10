@@ -47,7 +47,7 @@ def makeEmbed(mediaItem):
         embed = discord.Embed(title=mediaItem.title,
                               url=url,
                               description=f"View on IMDb")
-        embed.add_field(name="\u200b". value=f"[Click here to view on IMDb]({url})")
+        embed.add_field(name="\u200b", value=f"[Click here to view on IMDb]({url})")
     embed.add_field(name="Summary", value=imdb_item.plot_outline, inline=False)
     embed.add_field(name="Release Date", value=imdb_item.release_date, inline=False)
     if mediaItem.type not in ['artist', 'album', 'track']:
