@@ -38,7 +38,7 @@ def makeEmbed(mediaItem):
     embed = None
     if credentials.RETURN_PLEX_URL:
         embed = discord.Embed(title=mediaItem.title,
-                              url=f"{credentials.PLEX_URL}/web/index.html#!/server/{plex.server_id}/details?key=%2Flibrary%2Fmetadata%2F{mediaItem.ratingKey}",
+                              url=f"https://app.plex.tv/desktop#!/server/{plex.server_id}/details?key=%2Flibrary%2Fmetadata%2F{mediaItem.ratingKey}",
                               description=f"Watch it on {credentials.PLEX_SERVER_NAME}")
     else:
         embed = discord.Embed(title=mediaItem.title,
