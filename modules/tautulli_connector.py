@@ -25,7 +25,16 @@ class TautulliConnector:
             self._error_and_analytics(error_message=f'Response content is not valid JSON: {e}', function_name='api_call_get (ValueError)')
         return None
 
-    def get_user_history(self, username, sectionIDs):
+    def get_user_history(self, username, sections_ids):
+        """
+        Return a list of titles of watched items
+        :param username:
+        :type username:
+        :param sectionIDs:
+        :type sectionIDs:
+        :return:
+        :rtype:
+        """
         try:
             user_id = None
             users = self.api_call_get(cmd='get_users')
@@ -37,8 +46,8 @@ class TautulliConnector:
                 self._error_and_analytics(error_message="I couldn't find that username. Please check and try again.", function_name='get_user_history (No User ID)')
                 return "Error"
             watched_titles = []
-            for sectionID in sectionIDs:
-                history = self.api_call_get(cmd='get_history', params=f'section_id={sectionID}&user_id={user_id}&length=10000')
+            for section_id in sections_ids:
+                history = self.api_call_get(cmd='get_history', params=f'section_id={section_id}&user_id={user_id}&length=10000')
                 for watched_item in history['response']['data']['data']:
                     watched_titles.append(watched_item['full_title'])
             return watched_titles

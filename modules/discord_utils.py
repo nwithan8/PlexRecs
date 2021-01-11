@@ -4,12 +4,17 @@ from discord.ext import commands, tasks
 import credentials
 import modules.imdb_connector as imdb
 
+def get_rating_key(item):
+    try:
+        return item.ratingKey
+    except:
+        return item.rating_key
 
 def make_embed(plex, analytics, media_item):
     imdb_item = imdb.get_imdb_item(media_item.title, analytics=analytics)
     embed = None
     if credentials.RETURN_PLEX_URL:
-        url = f"https://app.plex.tv/desktop#!/server/{plex.server_id}/details?key=%2Flibrary%2Fmetadata%2F{media_item.ratingKey}"
+        url = f"https://app.plex.tv/desktop#!/server/{plex.server_id}/details?key=%2Flibrary%2Fmetadata%2F{get_rating_key(item=media_item)}"
         embed = discord.Embed(title=media_item.title,
                               url=url,
                               description=f"Watch it on {credentials.PLEX_SERVER_NAME}")
@@ -34,3 +39,7 @@ def make_embed(plex, analytics, media_item):
         except:
             pass
     return embed
+
+
+def a_versus_an(word):
+    return "an" if word[0] in ['a', 'e', 'i', 'o', 'u'] else 'a'

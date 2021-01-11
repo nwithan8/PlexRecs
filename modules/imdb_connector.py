@@ -15,6 +15,20 @@ def get_imdb_item(title, analytics):
     return None
 
 
+def check_score(plex_item, rating: float, analytics, above: bool = True):
+    imdb_item = get_imdb_item(plex_item.title, analytics=analytics)
+    if not imdb_item:
+        return False
+    if not imdb_item.rating:
+        return False
+    elif above and imdb_item.rating < rating:  # want above and temp_choice is not above rating
+        return False
+    elif not above and imdb_item.rating > rating:  # want below and temp_choice is not below rating
+        return False
+    return True
+
+
+
 def build_ids_dict(ids):
     ids_dict = {}
     if ids.get('imdb'):

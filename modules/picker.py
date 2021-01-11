@@ -2,9 +2,14 @@ import random
 import modules.imdb_connector as imdb
 from modules.logs import *
 
+class Error:
+    def __init__(self, message: str):
+        self.message = message
 
-def pick_random(aList):
-    return random.choice(aList)
+TOO_MANY_ATTEMPTS = Error(message="Sorry, it took too long to find something for you")
+
+def pick_random(a_list):
+    return random.choice(a_list)
 
 
 def rating_is_correct(item, rating: float, above: bool = True):
@@ -17,32 +22,32 @@ def rating_is_correct(item, rating: float, above: bool = True):
     return True
 
 
-def pick_with_rating(aList, rating: float, above: bool = True, attempts: int = 0):
-    temp_choice = pick_random(aList)
+def pick_with_rating(a_list, rating: float, above: bool = True, attempts: int = 0):
+    temp_choice = pick_random(a_list)
     imdb_item = imdb.get_imdb_item(temp_choice.title)
     info(f"IMDb item: {imdb_item.title}; Rating: {imdb_item.rating}")
     if not rating_is_correct(item=imdb_item, rating=rating, above=above):
         if attempts > 10:  # give up after ten failures
-            return "Too many attempts"
-        return pick_with_rating(aList=aList, rating=rating, above=above, attempts=attempts + 1)
+            return TOO_MANY_ATTEMPTS
+        return pick_with_rating(a_list=a_list, rating=rating, above=above, attempts=attempts + 1)
     return temp_choice
 
 
-def pick_unwatched(history, mediaList, attempts: int = 0):
+def pick_unwatched(history, media_list, attempts: int = 0):
     """
     Keep picking until something is unwatched
     :param attempts:
     :param history:
-    :param mediaList: Movies list, Shows list or Artists list
+    :param media_list: Movies list, Shows list or Artists list
     :return: SmallMediaItem object
     """
     if history == "Error":
         return False
-    choice = pick_random(mediaList)
+    choice = pick_random(media_list)
     if choice.title in history:
         if attempts > 10:  # give up after ten failures
-            return "Too many attempts"
-        return pick_unwatched(history, mediaList, attempts=attempts + 1)
+            return TOO_MANY_ATTEMPTS
+        return pick_unwatched(history, media_list, attempts=attempts + 1)
     return choice
 
 
@@ -57,4 +62,4 @@ def pick_from_trakt_list(trakt_list, plex_instance, genre: str = None, rating: f
     if attempts < 5:
         info(f"Couldn't find {temp_choice.title} on Plex. Trying a different item...")
         pick_from_trakt_list(trakt_list=trakt_list, plex_instance=plex_instance, genre=genre, rating=rating, above=above, attempts=attempts+1)
-    return "Too many attempts"
+    return TOO_MANY_ATTEMPTS
