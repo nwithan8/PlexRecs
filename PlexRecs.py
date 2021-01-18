@@ -5,7 +5,6 @@ import credentials
 import sys
 from typing import Union, List
 
-
 import info as bot_info
 from modules.logs import *
 import modules.plex_connector as plex_connector
@@ -43,7 +42,7 @@ def build_filters(filters: List[str]):
     search_filters = {}
     for i in range(0, len(filters), 2):
         key = filters[i]
-        value = filters[i+1]
+        value = filters[i + 1]
         if key == 'new':
             new_filter = [key, value]  # ['new', 'plex_username']
         elif key == 'imdb':
@@ -77,7 +76,6 @@ def error_and_analytics(error_message, function_name):
                     random_uuid_if_needed=True)
 
 
-
 def find_recommendation(media_type: str,
                         filters: dict = None):
     if not filters:  # no filter, just pull a random one from pre-stored
@@ -96,7 +94,8 @@ def find_recommendation(media_type: str,
 
         if filters.get('plex'):  # replace with API if need to filter from Plex
             filtered_from_search = []
-            library_sections = [plex.get_library_section(section_id=section_id) for section_id in plex.libraries[media_type][0]]
+            library_sections = [plex.get_library_section(section_id=section_id) for section_id in
+                                plex.libraries[media_type][0]]
             for section in library_sections:
                 temp_results = plex_connector.search(library_section=section, **(filters['plex']))
                 for item in temp_results:
@@ -107,8 +106,8 @@ def find_recommendation(media_type: str,
 
         tautulli_history = []
         if filters.get('tautulli'):  # get user history to check for a new item
-            tautulli_history = plex.get_user_history(username=filters['tautulli'][1], sections_ids=plex.libraries[media_type][0])
-
+            tautulli_history = plex.get_user_history(username=filters['tautulli'][1],
+                                                     sections_ids=plex.libraries[media_type][0])
 
         passes_all_filters = False
         retries = 0
@@ -183,14 +182,34 @@ class PlexRecs(commands.Cog):
                         await player_question.delete()
                         ask_about_player = False
 
-
     @tasks.loop(minutes=60.0)  # update library every hour
     async def makeLibraries(self):
         plex.make_libraries()
 
-
     @commands.command(name="recommend", aliases=['suggest', 'rec', 'sugg'], pass_context=True)
     async def plex_rec(self, ctx: commands.Context, mediaType: str, *, filters: str = None):
+        """
+        Get a recommendation item from Plex.
+        Required:
+        - what kind of content you want (i.e. 'movie', 'show', 'anime', 'song')
+
+        Optional filters:
+        - new [PLEX_USERNAME]: Only get recommended something you haven't played before
+        - imdb +/-[SCORE]: Only get recommended something that scores better/worse than [SCORE] on IMDb
+        - trakt [LIST_NAME]: Only get recommended something from a specific Trakt.tv list
+        - genre [GENRE]: Only get recommended something of a specific genre
+        - year [YEAR]: Only get recommended something from a specific year
+        Other Plex filters are supported:
+        - actor [ACTOR_ID]
+        - collection [COLLECTION_ID]
+        - contentRating [CONTENT_RATING]
+        - country [COUNTRY]
+        - decade [DECADE]
+        - director [DIRECTOR_ID]
+        - network [NETWORK_NAME]
+        - resolution [RESOLUTION]
+        - studio [STUDIO_NAME]
+        """
         if filters:
             filters = filters.split()
             filters = build_filters(filters=filters)
@@ -220,7 +239,6 @@ class PlexRecs(commands.Cog):
     async def plex_rec_error(self, ctx, error_msg):
         error_and_analytics(error_message=error_msg, function_name='plex_rec')
         await ctx.send("Sorry, something went wrong while looking for a recommendation.")
-
 
     def __init__(self, bot):
         print(bot_info.COPYRIGHT_MESSAGE)

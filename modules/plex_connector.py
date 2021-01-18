@@ -22,6 +22,10 @@ def get_possible_matching_items(library_section, title, year, external_ids: dict
     return matches
 
 
+def get_possible_section_filters(library_section) -> List:
+    return library_section.ALLOWED_FILTERS
+
+
 def _build_filters(library_section: LibrarySection, **kwargs):
     available_filters = [item.key for item in library_section.filterFields()]
     final_filters = {}
@@ -43,10 +47,11 @@ def _contains_keywords(item, keywords: list) -> bool:
     """
     for keyword in keywords:
         if keyword.lower() in item.summary.lower():
-                return True
+            return True
         elif keyword.lower() in item.title.lower():
-                return True
+            return True
     return False
+
 
 def search(library_section: LibrarySection,
            **kwargs):
