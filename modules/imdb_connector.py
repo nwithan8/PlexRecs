@@ -1,4 +1,5 @@
 from imdbpie import ImdbFacade
+
 from modules.logs import *
 
 imdb = ImdbFacade()

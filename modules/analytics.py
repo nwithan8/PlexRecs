@@ -1,6 +1,7 @@
-import requests
-import uuid
 import urllib
+import uuid
+
+import requests
 
 
 def _time_uuid():

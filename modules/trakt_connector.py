@@ -1,9 +1,10 @@
-from modules.logs import *
+import json
+
 import trakt
 import trakt.core
 from trakt.users import User
-import json
-import os
+
+from modules.logs import *
 
 
 def get_stored_oauth_token(filename):
@@ -57,8 +58,8 @@ class TraktConnector:
     def get_username_by_listname(self, list_name):
         # Returns first match, be warned if multiple lists with same name, different users
         for username, lists in self.lists.items():
-            for list in lists:
-                if list == list_name:
+            for a_list in lists:
+                if a_list == list_name:
                     return username
         return None
 

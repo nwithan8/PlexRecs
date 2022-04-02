@@ -1,5 +1,7 @@
-import requests
 import json
+
+import requests
+
 from modules.logs import *
 
 
@@ -20,12 +22,14 @@ class TautulliConnector:
             if response:
                 return response.json()
         except json.JSONDecodeError as e:
-            self._error_and_analytics(error_message=f'Response JSON is empty: {e}', function_name='api_call_get (JSONDecodeError)')
+            self._error_and_analytics(error_message=f'Response JSON is empty: {e}',
+                                      function_name='api_call_get (JSONDecodeError)')
         except ValueError as e:
-            self._error_and_analytics(error_message=f'Response content is not valid JSON: {e}', function_name='api_call_get (ValueError)')
+            self._error_and_analytics(error_message=f'Response content is not valid JSON: {e}',
+                                      function_name='api_call_get (ValueError)')
         return None
 
-    def get_user_history(self, username, sectionIDs):
+    def get_user_history(self, username, section_ids):
         try:
             user_id = None
             users = self.api_call_get(cmd='get_users')
@@ -34,14 +38,17 @@ class TautulliConnector:
                     user_id = user['user_id']
                     break
             if not user_id:
-                self._error_and_analytics(error_message="I couldn't find that username. Please check and try again.", function_name='get_user_history (No User ID)')
+                self._error_and_analytics(error_message="I couldn't find that username. Please check and try again.",
+                                          function_name='get_user_history (No User ID)')
                 return "Error"
             watched_titles = []
-            for sectionID in sectionIDs:
-                history = self.api_call_get(cmd='get_history', params=f'section_id={sectionID}&user_id={user_id}&length=10000')
+            for sectionID in section_ids:
+                history = self.api_call_get(cmd='get_history',
+                                            params=f'section_id={sectionID}&user_id={user_id}&length=10000')
                 for watched_item in history['response']['data']['data']:
                     watched_titles.append(watched_item['full_title'])
             return watched_titles
         except Exception as e:
-            self._error_and_analytics(error_message=f"Error in getHistory: {e}", function_name='get_user_history (general)')
+            self._error_and_analytics(error_message=f"Error in getHistory: {e}",
+                                      function_name='get_user_history (general)')
         return "Error"

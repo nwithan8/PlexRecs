@@ -1,17 +1,18 @@
-from plexapi.server import PlexServer
 from plexapi import exceptions as plex_exceptions
+from plexapi.server import PlexServer
 from progress.bar import Bar
-from modules.logs import *
+
 import modules.tautulli_connector as tautulli
+from modules.logs import *
 
 
 class SmallMediaItem:
-    def __init__(self, title, year, ratingKey, librarySectionID, mediaType, external_ids=None):
+    def __init__(self, title, year, rating_key, library_section_id, media_type, external_ids=None):
         self.title = title
         self.year = year
-        self.ratingKey = ratingKey
-        self.librarySectionID = librarySectionID
-        self.type = mediaType
+        self.ratingKey = rating_key
+        self.librarySectionID = library_section_id
+        self.type = media_type
         self.external_ids = external_ids
 
 
@@ -52,7 +53,8 @@ class PlexConnector:
         self.analytics.event(event_category="Error", event_action=function_name, random_uuid_if_needed=True)
 
     def make_tautulli_connector(self):
-        self.tautulli = tautulli.TautulliConnector(url=self.tautulli_url, api_key=self.tautulli_key, analytics=self.analytics)
+        self.tautulli = tautulli.TautulliConnector(url=self.tautulli_url, api_key=self.tautulli_key,
+                                                   analytics=self.analytics)
 
     def initialize_library(self, library_list):
         for name, numbers in library_list.items():
@@ -63,37 +65,45 @@ class PlexConnector:
         for groupName, items in self.libraries.items():
             items[1].clear()
 
-    def make_library(self, libraryName, attempts: int = 0):
+    def make_library(self, library_name, attempts: int = 0):
         try:
-            if not self.libraries[libraryName][1]:
-                for libraryNumber in self.libraries[libraryName][0]:
-                    json_data = self.tautulli.api_call_get("get_library", f"section_id={libraryNumber}")
+            if not self.libraries[library_name][1]:
+                for library_number in self.libraries[library_name][0]:
+                    json_data = self.tautulli.api_call_get("get_library", f"section_id={library_number}")
                     if json_data:
                         count = json_data['response']['data']['count']
-                        bar = Bar(f'Loading {libraryName} (Library section {libraryNumber})', max=int(count))
-                        librarySection = self.server.library.sectionByID(f"{libraryNumber}")
-                        for item in librarySection.all():
+                        bar = Bar(f'Loading {library_name} (Library section {library_number})', max=int(count))
+                        library_section = self.server.library.sectionByID(f"{library_number}")
+                        for item in library_section.all():
                             try:
-                                self.libraries[libraryName][1].append(
+                                self.libraries[library_name][1].append(
                                     SmallMediaItem(title=item.title,
-                                                   year=(None if librarySection.type == 'artist' else item.year),
-                                                   ratingKey=item.ratingKey, librarySectionID=item.librarySectionID,
-                                                   mediaType=item.type))
+                                                   year=(None if library_section.type == 'artist' else item.year),
+                                                   rating_key=item.ratingKey, library_section_id=item.librarySectionID,
+                                                   media_type=item.type))
                             except plex_exceptions.PlexApiException as e:
-                                self._error_and_analytics(error_message=f"Could not create SmallMediaItem for Plex library item: {e}", function_name='make_library (smallMediaItem internal)')
+                                self._error_and_analytics(
+                                    error_message=f"Could not create Smallmedia_item for Plex library item: {e}",
+                                    function_name='make_library (smallmedia_item internal)')
                             bar.next()
                         bar.finish()
                         return True
                     else:
-                        self._error_and_analytics(error_message=f"Could not get JSON data to build {libraryName} library.", function_name='make_library (JSONError)')
+                        self._error_and_analytics(
+                            error_message=f"Could not get JSON data to build {library_name} library.",
+                            function_name='make_library (JSONError)')
         except KeyError as e:
-            self._error_and_analytics(error_message=f"Could not get section {libraryNumber} ({libraryName}) from the Plex Server: {e}", function_name='make_library (KeyError)')
+            self._error_and_analytics(
+                error_message=f"Could not get section {library_number} ({library_name}) from the Plex Server: {e}",
+                function_name='make_library (KeyError)')
         except plex_exceptions.PlexApiException as e:
-            self._error_and_analytics(error_message=f"Could not create SmallMediaItem from Plex library item: {e}", function_name='make_library (PlexApiException)')
+            self._error_and_analytics(error_message=f"Could not create Smallmedia_item from Plex library item: {e}",
+                                      function_name='make_library (PlexApiException)')
         except Exception as e:
-            self._error_and_analytics(error_message=f'Error in makeLibrary: {e}', function_name='make_library (general)')
+            self._error_and_analytics(error_message=f'Error in makeLibrary: {e}',
+                                      function_name='make_library (general)')
             if attempts < 5:  # for generic errors, retry making the library
-                return self.make_library(libraryName=libraryName, attempts=attempts + 1)
+                return self.make_library(library_name=library_name, attempts=attempts + 1)
         return False
 
     def make_libraries(self):
@@ -101,12 +111,12 @@ class PlexConnector:
             self.make_tautulli_connector()
         self.clean_libraries()
         for groupName in self.libraries.keys():
-            self.make_library(libraryName=groupName)
+            self.make_library(library_name=groupName)
 
-    def get_user_history(self, username, sectionIDs):
-        return self.tautulli.get_user_history(username=username, sectionIDs=sectionIDs)
+    def get_user_history(self, username, section_ids):
+        return self.tautulli.get_user_history(username=username, section_ids=section_ids)
 
-    def get_available_players(self, mediaType):
+    def get_available_players(self, media_type):
         self.owner_players = []
         players = self.server.clients()
         if not players:
@@ -117,22 +127,22 @@ class PlexConnector:
             num = num + 1
             players_list += f'\n{num}:{player.title}'
             self.owner_players.append(player)
-        return f'{players_list}\nReact with which player you want to start this {mediaType} on.', num
+        return f'{players_list}\nReact with which player you want to start this {media_type} on.', num
 
-    def playMedia(self, playerNumber, mediaItem):
-        self.owner_players[playerNumber].goToMedia(mediaItem)
+    def play_media(self, player_number, media_item):
+        self.owner_players[player_number].goToMedia(media_item)
 
     def get_library_section(self, section_id):
         return self.server.library.sectionByID(f"{section_id}")
 
-    def getFullMediaItem(self, mediaItem, external_ids=None, match_keys: bool = True):
+    def get_full_media_item(self, media_item, external_ids=None, match_keys: bool = True):
         if external_ids is None:
             external_ids = []
-        librarySection = self.get_library_section(section_id=mediaItem.librarySectionID)
-        for item in search_for_item(library_section=librarySection, title=mediaItem.title, year=mediaItem.year,
+        library_section = self.get_library_section(section_id=media_item.librarySectionID)
+        for item in search_for_item(library_section=library_section, title=media_item.title, year=media_item.year,
                                     external_ids=external_ids):
             if match_keys:
-                if item.ratingKey == mediaItem.ratingKey:
+                if item.ratingKey == media_item.ratingKey:
                     return item
             else:
                 return item  # go with the first item in the list
@@ -141,7 +151,8 @@ class PlexConnector:
     def get_server_id(self):
         return self.server.machineIdentifier
 
-    def is_on_plex(self, title, year, external_ids=None, section_id=None, section_name=None, match_rating_keys: bool = False):
+    def is_on_plex(self, title, year, external_ids=None, section_id=None, section_name=None,
+                   match_rating_keys: bool = False):
         sections_ids_to_check = []
         if section_id:
             sections_ids_to_check.append(section_id)
@@ -151,12 +162,12 @@ class PlexConnector:
                 sections_ids_to_check.append(section.key)
         if not sections_ids_to_check:
             for name, ids in self.libraries.items():
-                for libraryNumber in ids[0]:
-                    sections_ids_to_check.append(libraryNumber)
+                for library_number in ids[0]:
+                    sections_ids_to_check.append(library_number)
         for s_id in sections_ids_to_check:
-            temp_media_item = SmallMediaItem(title=title, year=year, ratingKey=None,
-                                             librarySectionID=s_id, mediaType=None, external_ids=external_ids)
-            possible_match = self.getFullMediaItem(mediaItem=temp_media_item, match_keys=match_rating_keys)
+            temp_media_item = SmallMediaItem(title=title, year=year, rating_key=None,
+                                             library_section_id=s_id, media_type=None, external_ids=external_ids)
+            possible_match = self.get_full_media_item(media_item=temp_media_item, match_keys=match_rating_keys)
             if possible_match:
                 return possible_match
         return False

@@ -7,4 +7,3 @@ def info(message):
 
 def error(message):
     logging.error(msg=message)
-
