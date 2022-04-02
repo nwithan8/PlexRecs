@@ -1,16 +1,19 @@
 import asyncio
-import discord
-from discord.ext import commands, tasks
-import credentials
+import inspect
 import sys
 from typing import Union
 
-from modules.logs import *
-import modules.plex_connector as plex_connector
-import modules.trakt_connector as trakt_connector
+import discord
+from discord.ext import commands, tasks
+
+import credentials
+import modules.analytics as ga
 import modules.imdb_connector as imdb
 import modules.picker as picker
-import modules.analytics as ga
+import modules.plex_connector as plex_connector
+import modules.trakt_connector as trakt_connector
+from modules.library_database import PlexContentDatabase
+from modules.logs import *
 
 analytics = ga.GoogleAnalytics(analytics_id='UA-174268200-1', anonymous_ip=True,
                                do_not_track=not credentials.ALLOW_ANALYTICS)
@@ -18,7 +21,8 @@ analytics = ga.GoogleAnalytics(analytics_id='UA-174268200-1', anonymous_ip=True,
 plex = plex_connector.PlexConnector(url=credentials.PLEX_URL, token=credentials.PLEX_TOKEN,
                                     server_name=credentials.PLEX_SERVER_NAME,
                                     library_list=credentials.LIBRARIES, tautulli_url=credentials.TAUTULLI_BASE_URL,
-                                    tautulli_key=credentials.TAUTULLI_API_KEY, analytics=analytics)
+                                    tautulli_key=credentials.TAUTULLI_API_KEY, analytics=analytics,
+                                    database=PlexContentDatabase("content.db"))
 
 trakt = trakt_connector.TraktConnector(username=credentials.TRAKT_USERNAME,
                                        client_id=credentials.TRAKT_CLIENT_ID,
@@ -33,11 +37,11 @@ def error_and_analytics(error_message, function_name):
     analytics.event(event_category="Error", event_action=function_name, random_uuid_if_needed=True)
 
 
-def make_embed(media_item):
+def make_embed(media_item: plex_connector.SmallMediaItem):
     imdb_item = imdb.get_imdb_item(media_item.title, analytics=analytics)
     embed = None
     if credentials.RETURN_PLEX_URL:
-        url = f"https://app.plex.tv/desktop#!/server/{plex.server_id}/details?key=%2Flibrary%2Fmetadata%2F{media_item.ratingKey}"
+        url = f"https://app.plex.tv/desktop#!/server/{plex.server_id}/details?key=%2Flibrary%2Fmetadata%2F{media_item.rating_key}"
         embed = discord.Embed(title=media_item.title,
                               url=url,
                               description=f"Watch it on {credentials.PLEX_SERVER_NAME}")
@@ -58,10 +62,9 @@ def make_embed(media_item):
     return embed
 
 
-def find_rec(media_type: str = None, unwatched: bool = False, username: str = None, rating: float = None,
-             above: bool = True, trakt_list_name: str = None, attempts: int = 0):
+def find_rec(media_type: str, unwatched: bool = False, username: str = None, rating: float = None,
+             above: bool = True, trakt_list_name: str = None, attempts: int = 10):
     """
-
     :param attempts:
     :param trakt_list_name:
     :param above:
@@ -73,27 +76,27 @@ def find_rec(media_type: str = None, unwatched: bool = False, username: str = No
     """
     try:
         if unwatched:
-            return picker.pick_unwatched(
-                history=plex.get_user_history(username=username, section_ids=plex.libraries[media_type][0]),
-                media_list=plex.libraries[media_type][1])
+            return picker.pick_unwatched(plex_connector=plex, username=username, media_type=media_type,
+                                         attempts=attempts)
         elif rating:
-            return picker.pick_with_rating(a_list=plex.libraries[media_type][1], rating=rating, above=above)
+            return picker.pick_with_rating(plex_connector=plex, media_type=media_type, rating=rating, above=above,
+                                           attempts=attempts)
         elif trakt_list_name:
-            trakt_list = trakt.get_list_items(list_name=trakt_list_name)
-            return picker.pick_from_trakt_list(trakt_list=trakt_list, plex_instance=plex)
+            return picker.pick_from_trakt_list(trakt_connector=trakt, trakt_list_name=trakt_list_name,
+                                               plex_connector=plex, attempts=attempts)
         else:
-            return picker.pick_random(a_list=plex.libraries[media_type][1])
+            return picker.pick_random(plex_connector=plex, media_type=media_type)
     except Exception as e:
-        error_and_analytics(error_message=f"Error in findRec: {e}", function_name='findRec')
+        error_and_analytics(error_message=f"Error in findRec: {e}", function_name=inspect.currentframe().f_code.co_name)
     return False
 
 
-def makeRecommendation(media_type, unwatched: bool = False, PlexUsername: str = None, rating: float = None,
-                       above: bool = True, trakt_list_name: str = None):
+def make_recommendation(media_type: str, unwatched: bool = False, plex_username: str = None, rating: float = None,
+                        above: bool = True, trakt_list_name: str = None):
     if unwatched:
-        if not PlexUsername:
+        if not plex_username:
             return "Please include a Plex username"
-        recommendation = find_rec(media_type=media_type, unwatched=True, username=PlexUsername)
+        recommendation = find_rec(media_type=media_type, unwatched=True, username=plex_username)
         if not recommendation:
             return "I couldn't find that Plex username", None, None
         if recommendation == "Too many attempts":
@@ -120,12 +123,12 @@ class PlexRecs(commands.Cog):
             if response:
                 ask_about_player = True
                 while ask_about_player:
-                    try:
-                        def check(react, react_user, num_players):
-                            return str(react.emoji) in emoji_numbers[
-                                                       :number_of_players] and react_user.id == credentials.OWNER_DISCORD_ID
+                    def check(react, react_user, num_players):
+                        return str(react.emoji) in emoji_numbers[:number_of_players] \
+                               and react_user.id == credentials.OWNER_DISCORD_ID
 
-                        player_question = await ctx.send(response)
+                    player_question = await ctx.send(response)
+                    try:
                         for i in range(0, number_of_players - 1):
                             await player_question.add_reaction(emoji_numbers[i])
                         reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check)
@@ -143,7 +146,7 @@ class PlexRecs(commands.Cog):
 
     @tasks.loop(minutes=60.0)  # update library every hour
     async def make_libraries(self):
-        plex.make_libraries()
+        plex.populate_libraries()
 
     @commands.group(aliases=['recommend', 'suggest', 'rec', 'sugg'], pass_context=True)
     async def plex_rec(self, ctx: commands.Context, media_type: str):
@@ -151,19 +154,19 @@ class PlexRecs(commands.Cog):
         Movie, show or artist recommendation from Plex
 
         Say 'movie', 'show' or 'artist'
-        Use 'rec <media_type> new <PlexUsername>' for an unwatched recommendation.
+        Use 'rec <media_type> new <plex_username>' for an unwatched recommendation.
         Use 'rec <media_type> above/below <rating>' for a movie above/below a certain IMDb score.
         """
         if ctx.invoked_subcommand is None:
-            if media_type.lower() not in plex.libraries.keys():
-                accepted_types = "', '".join(plex.libraries.keys())
+            if media_type.lower() not in plex.library_config.keys():
+                accepted_types = "', '".join(plex.library_config.keys())
                 await ctx.send(f"Please try again, indicating '{accepted_types}'")
             else:
                 hold_message = await ctx.send(
                     "Looking for a{} {}...".format("n" if (media_type[0] in ['a', 'e', 'i', 'o', 'u']) else "",
                                                    media_type))
                 async with ctx.typing():
-                    response, embed, media_item = makeRecommendation(media_type, False, None)
+                    response, embed, media_item = make_recommendation(media_type, False, None)
                 await hold_message.delete()
                 if embed is not None:
                     await ctx.send(response, embed=embed)
@@ -174,7 +177,7 @@ class PlexRecs(commands.Cog):
 
     @plex_rec.error
     async def plex_rec_error(self, ctx, error_msg):
-        error_and_analytics(error_message=error_msg, function_name='plex_rec')
+        error_and_analytics(error_message=error_msg, function_name=inspect.currentframe().f_code.co_name)
         await ctx.send("Sorry, something went wrong while looking for a recommendation.")
 
     @plex_rec.command(name="new", aliases=['unwatched', 'unseen', 'unlistened'])
@@ -184,17 +187,17 @@ class PlexRecs(commands.Cog):
         Include your Plex username
         """
         media_type = None
-        for group in plex.libraries.keys():
+        for group in plex.library_config.keys():
             if group in ctx.message.content:
                 media_type = group
                 break
         if not media_type:
-            accepted_types = "', '".join(plex.libraries.keys())
+            accepted_types = "', '".join(plex.library_config.keys())
             await ctx.send(f"Please try again, indicating '{accepted_types}'")
         else:
             hold_message = await ctx.send(f"Looking for a new {media_type}...")
             async with ctx.typing():
-                response, embed, media_item = makeRecommendation(media_type, True, plex_username)
+                response, embed, media_item = make_recommendation(media_type, True, plex_username)
             await hold_message.delete()
             if embed is not None:
                 await ctx.send(response, embed=embed)
@@ -205,7 +208,7 @@ class PlexRecs(commands.Cog):
 
     @plex_rec_new.error
     async def plex_rec_new_error(self, ctx, error_msg):
-        error_and_analytics(error_message=error_msg, function_name='plex_rec_new')
+        error_and_analytics(error_message=error_msg, function_name=inspect.currentframe().f_code.co_name)
         await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
 
     @plex_rec.command(name="above", aliases=['over', 'better'])
@@ -215,7 +218,7 @@ class PlexRecs(commands.Cog):
         Include your rating
         """
         media_type = None
-        for group in plex.libraries.keys():
+        for group in plex.library_config.keys():
             if group in ctx.message.content:
                 media_type = group
                 break
@@ -224,7 +227,8 @@ class PlexRecs(commands.Cog):
         else:
             hold_message = await ctx.send(f"Looking for a {media_type} that's rated at least {rating} on IMDb...")
             async with ctx.typing():
-                response, embed, media_item = makeRecommendation(media_type=media_type, rating=float(rating), above=True)
+                response, embed, media_item = make_recommendation(media_type=media_type, rating=float(rating),
+                                                                  above=True)
             await hold_message.delete()
             if embed is not None:
                 await ctx.send(response, embed=embed)
@@ -235,7 +239,7 @@ class PlexRecs(commands.Cog):
 
     @plex_rec_above.error
     async def plex_rec_above_error(self, ctx, error_msg):
-        error_and_analytics(error_message=error_msg, function_name='plex_rec_above')
+        error_and_analytics(error_message=error_msg, function_name=inspect.currentframe().f_code.co_name)
         await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
 
     @plex_rec.command(name="below", aliases=['under', 'worse'])
@@ -245,7 +249,7 @@ class PlexRecs(commands.Cog):
         Include your rating
         """
         media_type = None
-        for group in plex.libraries.keys():
+        for group in plex.library_config.keys():
             if group in ctx.message.content:
                 media_type = group
                 break
@@ -254,7 +258,8 @@ class PlexRecs(commands.Cog):
         else:
             hold_message = await ctx.send(f"Looking for a {media_type} that's rated less than {rating} on IMDb...")
             async with ctx.typing():
-                response, embed, media_item = makeRecommendation(media_type=media_type, rating=float(rating), above=False)
+                response, embed, media_item = make_recommendation(media_type=media_type, rating=float(rating),
+                                                                  above=False)
             await hold_message.delete()
             if embed is not None:
                 await ctx.send(response, embed=embed)
@@ -265,7 +270,7 @@ class PlexRecs(commands.Cog):
 
     @plex_rec_below.error
     async def plex_rec_below_error(self, ctx, error_msg):
-        error_and_analytics(error_message=error_msg, function_name='plex_rec_below')
+        error_and_analytics(error_message=error_msg, function_name=inspect.currentframe().f_code.co_name)
         await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
 
     @plex_rec.command(name="trakt")
@@ -277,7 +282,7 @@ class PlexRecs(commands.Cog):
         Once a choice is made from Trakt, the item is searched for in your Plex library. False matches are possible.
         """
         media_type = None
-        for group in plex.libraries.keys():
+        for group in plex.library_config.keys():
             if group in ctx.message.content:
                 media_type = group
                 break
@@ -286,7 +291,7 @@ class PlexRecs(commands.Cog):
         else:
             hold_message = await ctx.send(f"Looking for a {media_type} from the '{list_name}' list on Trakt.tv")
             async with ctx.typing():
-                response, embed, media_item = makeRecommendation(media_type=media_type, trakt_list_name=list_name)
+                response, embed, media_item = make_recommendation(media_type=media_type, trakt_list_name=list_name)
             await hold_message.delete()
             if embed is not None:
                 await ctx.send(response, embed=embed)
@@ -297,7 +302,7 @@ class PlexRecs(commands.Cog):
 
     @plex_rec_trakt.error
     async def plex_rec_trakt_error(self, ctx, error_msg):
-        error_and_analytics(error_message=error_msg, function_name='plex_rec_trakt')
+        error_and_analytics(error_message=error_msg, function_name=inspect.currentframe().f_code.co_name)
         await ctx.send("Sorry, something went wrong while looking for a new recommendation.")
 
     def __init__(self, bot):
