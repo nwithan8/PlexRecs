@@ -11,9 +11,6 @@ bot = commands.Bot(credentials.BOT_PREFIX)
 
 formatter = commands.HelpCommand(show_check_failure=False)
 
-print(
-    "PlexRecs  Copyright (C) 2020  Nathan Harris\nThis program comes with ABSOLUTELY NO WARRANTY.\nThis is free "
-    "software, and you are welcome to redistribute it\nunder certain conditions.\n")
 info("Starting application...")
 
 exts = [

@@ -12,7 +12,8 @@ import modules.imdb_connector as imdb
 import modules.picker as picker
 import modules.plex_connector as plex_connector
 import modules.trakt_connector as trakt_connector
-from modules.library_database import PlexContentDatabase
+from modules import discord_utils
+from modules.library_database import PlexContentDatabase, Content
 from modules.logs import *
 
 analytics = ga.GoogleAnalytics(analytics_id='UA-174268200-1', anonymous_ip=True,
@@ -35,31 +36,6 @@ emoji_numbers = [u"1\u20e3", u"2\u20e3", u"3\u20e3", u"4\u20e3", u"5\u20e3"]
 def error_and_analytics(error_message, function_name):
     error(error_message)
     analytics.event(event_category="Error", event_action=function_name, random_uuid_if_needed=True)
-
-
-def make_embed(media_item: plex_connector.SmallMediaItem):
-    imdb_item = imdb.get_imdb_item(media_item.title, analytics=analytics)
-    embed = None
-    if credentials.RETURN_PLEX_URL:
-        url = f"https://app.plex.tv/desktop#!/server/{plex.server_id}/details?key=%2Flibrary%2Fmetadata%2F{media_item.rating_key}"
-        embed = discord.Embed(title=media_item.title,
-                              url=url,
-                              description=f"Watch it on {credentials.PLEX_SERVER_NAME}")
-        embed.add_field(name="\u200b", value=f"[Click here to watch on Plex]({url})")
-    else:
-        url = f"https://www.imdb.com/title/{imdb_item.imdb_id}"
-        embed = discord.Embed(title=media_item.title,
-                              url=url,
-                              description=f"View on IMDb")
-        embed.add_field(name="\u200b", value=f"[Click here to view on IMDb]({url})")
-    embed.add_field(name="Summary", value=imdb_item.plot_outline, inline=False)
-    embed.add_field(name="Release Date", value=imdb_item.release_date, inline=False)
-    if media_item.type not in ['artist', 'album', 'track']:
-        try:
-            embed.set_image(url=str(imdb_item.image.url))
-        except:
-            pass
-    return embed
 
 
 def find_rec(media_type: str, unwatched: bool = False, username: str = None, rating: float = None,
@@ -111,13 +87,13 @@ def make_recommendation(media_type: str, unwatched: bool = False, plex_username:
             return "Sorry, it took too long to find something for you", None, None
     else:
         recommendation = find_rec(media_type=media_type, unwatched=False)
-    embed = make_embed(recommendation)
-    return f"How about {recommendation.title}?", embed, recommendation
+    embed = discord_utils.make_embed(plex=plex, media_item=recommendation, analytics=analytics)
+    return f"How about {recommendation.Title}?", embed, recommendation
 
 
 class PlexRecs(commands.Cog):
 
-    async def user_response(self, ctx, media_type, media_item):
+    async def user_response(self, ctx, media_type: str, media_item: Content):
         if str(ctx.message.author.id) == str(credentials.OWNER_DISCORD_ID):
             response, number_of_players = plex.get_available_players(media_type=media_type)
             if response:
@@ -134,7 +110,7 @@ class PlexRecs(commands.Cog):
                         reaction, user = await self.bot.wait_for('reaction_add', timeout=60.0, check=check)
                         if reaction:
                             player_number = emoji_numbers.index(str(reaction.emoji))
-                            media_item = plex.get_full_media_item(media_item)
+                            media_item = plex.get_full_media_item(content_media_item=media_item)
                             if media_item:
                                 plex.play_media(player_number, media_item)
                             else:
@@ -151,11 +127,26 @@ class PlexRecs(commands.Cog):
     @commands.group(aliases=['recommend', 'suggest', 'rec', 'sugg'], pass_context=True)
     async def plex_rec(self, ctx: commands.Context, media_type: str):
         """
-        Movie, show or artist recommendation from Plex
+        Get a recommendation item from Plex.
+        Required:
+        - what kind of content you want (i.e. 'movie', 'show', 'anime', 'song')
 
-        Say 'movie', 'show' or 'artist'
-        Use 'rec <media_type> new <plex_username>' for an unwatched recommendation.
-        Use 'rec <media_type> above/below <rating>' for a movie above/below a certain IMDb score.
+        Optional filters:
+        - new [PLEX_USERNAME]: Only get recommended something you haven't played before
+        - imdb +/-[SCORE]: Only get recommended something that scores better/worse than [SCORE] on IMDb
+        - trakt [LIST_NAME]: Only get recommended something from a specific Trakt.tv list
+        - genre [GENRE]: Only get recommended something of a specific genre
+        - year [YEAR]: Only get recommended something from a specific year
+        Other Plex filters are supported:
+        - actor [ACTOR_ID]
+        - collection [COLLECTION_ID]
+        - contentRating [CONTENT_RATING]
+        - country [COUNTRY]
+        - decade [DECADE]
+        - director [DIRECTOR_ID]
+        - network [NETWORK_NAME]
+        - resolution [RESOLUTION]
+        - studio [STUDIO_NAME]
         """
         if ctx.invoked_subcommand is None:
             if media_type.lower() not in plex.library_config.keys():

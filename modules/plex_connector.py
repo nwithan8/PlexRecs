@@ -1,26 +1,78 @@
 from typing import List
 
+from plexapi.library import LibrarySection
+from plexapi.media import Guid
 from plexapi.server import PlexServer
 from progress.bar import Bar
 
 import modules.tautulli_connector as tautulli
 from modules.analytics import GoogleAnalytics
-from modules.library_database import PlexContentDatabase
+from modules.library_database import PlexContentDatabase, Content
 from modules.logs import *
 
 
-def search_for_item(library_section, title, year, external_ids=None):
+def get_possible_matching_items(library_section, title, year, external_ids: List[str] = None) -> List:
     matches = []
     if external_ids:
         if 'guid' not in library_section.ALLOWED_FILTERS:
             library_section.ALLOWED_FILTERS += ('guid',)
-        for source_name, e_id in external_ids.items():
-            for item in library_section.search(guid=f"{source_name}://{e_id}"):
+        for e_id in external_ids:
+            for item in library_section.search(guid=f"{e_id}"):
                 if item not in matches:
                     matches.append(item)
     else:
         matches = library_section.search(title=title, year=[year])
     return matches
+
+
+def get_possible_section_filters(library_section: LibrarySection) -> List:
+    return library_section.ALLOWED_FILTERS
+
+
+def _build_filters(library_section: LibrarySection, **kwargs):
+    available_filters = [item.key for item in library_section.filterFields()]
+    final_filters = {}
+    for k, v in kwargs.items():
+        if k in available_filters and v:
+            final_filters[k] = v
+    return final_filters
+
+
+def _contains_keywords(item, keywords: list) -> bool:
+    """
+    Any one of multiple keywords exists in title or description?
+    :param item:
+    :type item:
+    :param keywords:
+    :type keywords:
+    :return:
+    :rtype:
+    """
+    for keyword in keywords:
+        if keyword.lower() in item.summary.lower():
+            return True
+        elif keyword.lower() in item.title.lower():
+            return True
+    return False
+
+
+def search(library_section: LibrarySection,
+           **kwargs):
+    proper_filters = _build_filters(library_section=library_section, **kwargs)
+    if kwargs.get('external_id'):
+        # TODO Fix this
+        if 'guid' not in library_section.ALLOWED_FILTERS:
+            library_section.ALLOWED_FILTERS += ('guid',)
+        for source_name, e_id in kwargs.get('external_id').items():
+            proper_filters['guid'] = f"{source_name}://{e_id}"
+    search_results = library_section.search(**proper_filters)
+    if kwargs.get('keywords'):
+        results_with_keyword = []
+        for item in search_results:
+            if _contains_keywords(item=item, keywords=kwargs.get('keywords')):
+                results_with_keyword.append(item)
+        return results_with_keyword
+    return search_results
 
 
 class SmallMediaItem:
@@ -71,9 +123,9 @@ class PlexConnector:
 
     def get_random_media_item(self, library_id: int = None, media_type: str = None):
         if library_id:
-            return self.database.get_random_content_for_library(library_section_id=library_id)
+            return self.database.get_random_contents_for_library(library_section_id=library_id)[0]
         else:
-            return self.database.get_random_content_of_type(media_type=media_type)
+            return self.database.get_random_contents_of_type(media_type=media_type)[0]
 
     def clean_libraries(self):
         self.database.purge()
@@ -92,11 +144,17 @@ class PlexConnector:
                 self._error_and_analytics(f"Could not find library {library_number} on Plex", "_populate_library")
                 continue
             for item in library_section.all():
+                external_ids = []
+                try:
+                    external_ids = [guid.id for guid in item.guids]
+                except AttributeError:
+                    pass
                 small_media_item = SmallMediaItem(title=item.title,
                                                   year=(None if library_section.type == 'artist' else item.year),
                                                   rating_key=item.ratingKey,
                                                   library_section_id=item.librarySectionID,
-                                                  media_type=item.type)
+                                                  media_type=item.type,
+                                                  external_ids=external_ids)
                 small_media_item.add_to_database(database=self.database)
                 bar.next()
             bar.finish()
@@ -128,16 +186,21 @@ class PlexConnector:
     def get_library_section(self, section_id):
         return self.server.library.sectionByID(f"{section_id}")
 
-    def get_full_media_item(self, media_item: SmallMediaItem, external_ids: List[str] = None, match_keys: bool = True):
-        if external_ids is None:
-            external_ids = []
-        library_section = self.get_library_section(section_id=media_item.library_section_id)
+    def get_full_media_item(self, content_media_item: Content = None, small_media_item: SmallMediaItem = None,
+                            match_keys: bool = True):
+        library_section = self.get_library_section(
+            section_id=content_media_item.LibraryID if content_media_item else small_media_item.library_section_id)
         if not library_section:
             return None
-        for item in search_for_item(library_section=library_section, title=media_item.title, year=media_item.year,
-                                    external_ids=external_ids):
+        for item in get_possible_matching_items(library_section=library_section,
+                                                title=content_media_item.Title if content_media_item else small_media_item.title,
+                                                year=content_media_item.Year if content_media_item else None,
+                                                external_ids=self.database.get_external_ids_for_content(
+                                                    content_id=content_media_item.ID) if content_media_item else small_media_item.external_ids
+                                                ):
             if match_keys:
-                if item.ratingKey == media_item.rating_key:
+                if item.ratingKey == (
+                        content_media_item.RatingKey if content_media_item else small_media_item.rating_key):
                     return item
             else:
                 return item  # go with the first item in the list
@@ -163,7 +226,7 @@ class PlexConnector:
         for s_id in sections_ids_to_check:
             temp_media_item = SmallMediaItem(title=title, year=year, rating_key=None,
                                              library_section_id=s_id, media_type=None, external_ids=external_ids)
-            possible_match = self.get_full_media_item(media_item=temp_media_item, match_keys=match_rating_keys)
+            possible_match = self.get_full_media_item(small_media_item=temp_media_item, match_keys=match_rating_keys)
             if possible_match:
                 return possible_match
         return False

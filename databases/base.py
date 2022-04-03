@@ -43,7 +43,7 @@ def false_if_error(func):
         """
         try:
             return func(self, *args, **kwargs)
-        except:
+        except Exception as e:
             return False
 
     return wrapper
@@ -85,9 +85,9 @@ class SQLAlchemyDatabase:
         self.meta = MetaData()
         self.meta.create_all(self.engine)
 
-        session = sessionmaker()
-        session.configure(bind=self.engine)
-        self.session = session()
+        Session = sessionmaker()
+        Session.configure(bind=self.engine)
+        self.session = Session()
 
     def get_first_entry(self, table_schema):
         return self.session.query(table_schema).first()
@@ -96,11 +96,7 @@ class SQLAlchemyDatabase:
         return self.session.query(table_schema).all()
 
     def get_all_by_filters(self, table, **kwargs):
-        query = self.session.query(table)
-        for k, v in kwargs.items():
-            if v is not None:
-                query = query.filter(k == v)
-        return query.all()
+        return self.session.query(table).filter_by(**kwargs).all()
 
     def get_attribute_from_first_entry(self, table_schema, field_name):
         entry = self.get_first_entry(table_schema=table_schema)
@@ -122,7 +118,7 @@ class SQLAlchemyDatabase:
     @false_if_error
     def create_entry_if_does_not_exist(self, table_schema, fields_to_check: List[str], **kwargs):
         filters = {k: v for k, v in kwargs.items() if k in fields_to_check}
-        entries = self.get_all_by_filters(table_schema=table_schema, **filters)
+        entries = self.get_all_by_filters(table=table_schema, **filters)
         if not entries:
             return self.create_entry(table_schema=table_schema, **kwargs)
         return entries[0]
