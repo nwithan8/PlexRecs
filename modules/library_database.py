@@ -1,6 +1,5 @@
 from typing import List
 
-from plexapi.media import Guid
 from sqlalchemy import VARCHAR, Column, Integer, String, BigInteger, Boolean, func
 from sqlalchemy.ext.declarative import declarative_base
 
