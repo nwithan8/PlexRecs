@@ -8,21 +8,6 @@ from modules import utils
 Base = declarative_base()
 
 
-def get_column(column_type: ColumnType, **kwargs):
-    sql_type = None
-    if column_type == ColumnType.DiscordRoleName:
-        sql_type = DiscordRoleName
-    elif column_type == ColumnType.DiscordUserID:
-        sql_type = DiscordUserID
-    elif column_type == ColumnType.DiscordServerID:
-        sql_type = DiscordServerID
-    elif column_type == ColumnType.DiscordUserName:
-        sql_type = DiscordUserName
-    elif column_type == ColumnType.URL:
-        sql_type = URL
-    return Column(sql_type, **kwargs)
-
-
 def get_table_schema_name(table: DeclarativeMeta) -> str:
     return getattr(table, "__name__", None)
 
