@@ -5,6 +5,7 @@ tautulli==3.*
 SQLAlchemy-Utils==0.38.3
 SQLAlchemy==1.4.40
 trakt==3.4.0
-imdbpie==5.*
+IMDbPY==2022.7.9
 asyncio==3.4.3
-diskcache==5.4.0
+confuse~=1.7
+requests~=2.28.1

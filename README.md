@@ -8,7 +8,7 @@ DISCLAIMER: This bot requires a Discord account and server, a Plex Media Server 
 2. Clone this repo with ``git clone https://github.com/nwithan8/PlexRecs.git``
 3. Navigate to PlexRecs directory with ``cd PlexRecs``
 4. Install dependencies with ``pip3 install -r requirements.txt``
-5. Open ``credentials.py`` file and fill out the credentials
+5. Rename the ``config.yaml.example`` file to ``config.yaml`` and fill out the credentials
 6. Run the bot with ``python3 run.py``
 
 # Usage

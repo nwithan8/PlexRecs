@@ -143,3 +143,4 @@ cython_debug/
 # Custom
 *.priv
 credentials.py
+/config.yaml

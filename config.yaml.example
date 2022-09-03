@@ -1,0 +1,46 @@
+appName: PlexRecs
+logLevel: WARN
+
+Plex:
+  URL: ""
+  Token: ""
+  ServerName: ""
+  UsePlexLink: true # True - recommendation has link to Plex. False - recommendation has link to IMDb page.
+  Libraries:
+    # http://[PMS_IP_Address]:32400/library/sections?X-Plex-Token=YourTokenGoesHere
+    # Use the above link to find the number for each library: composite="/library/sections/NUMBER/composite/..."
+    # Place the library number in the appropriate section below
+    Movies:
+    - 1
+    Shows:
+    - 2
+    Music:
+    - 3
+    - 6
+    4K:
+    - 4
+    Anime:
+
+Tautulli:
+  URL: ""
+  ApiKey: ""
+
+Discord:
+  BotToken: ""
+  BotPrefix: "?"
+  OwnerID: ""  # Right-click on your profile picture -> "Copy ID"
+
+Trakt:
+  # Make a Trakt application: https://trakt.tv/oauth/applications
+  Username: ""
+  ClientID: ""
+  ClientSecret: ""
+  Lists:
+    # Indicate the Trakt username and the list name for each public list you want to possibly use.
+    # NOTE: Only public lists work
+    - username/listname
+    - username/listname
+    - username/listname
+
+Extras:
+  Analytics: true  # See README.md for details

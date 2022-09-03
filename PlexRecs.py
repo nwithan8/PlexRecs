@@ -6,29 +6,30 @@ from typing import Union
 import discord
 from discord.ext import commands, tasks
 
-import credentials
 import modules.analytics as ga
 import modules.imdb_connector as imdb
 import modules.picker as picker
 import modules.plex_connector as plex_connector
 import modules.trakt_connector as trakt_connector
-from modules import discord_utils
+from modules import discord_utils, config_parser
 from modules.library_database import PlexContentDatabase, Content
 from modules.logs import *
 
-analytics = ga.GoogleAnalytics(analytics_id='UA-174268200-1', anonymous_ip=True,
-                               do_not_track=not credentials.ALLOW_ANALYTICS)
+config = config_parser.Config(app_name="PlexRecs", config_path="config.yaml")
 
-plex = plex_connector.PlexConnector(url=credentials.PLEX_URL, token=credentials.PLEX_TOKEN,
-                                    server_name=credentials.PLEX_SERVER_NAME,
-                                    library_list=credentials.LIBRARIES, tautulli_url=credentials.TAUTULLI_BASE_URL,
-                                    tautulli_key=credentials.TAUTULLI_API_KEY, analytics=analytics,
+analytics = ga.GoogleAnalytics(analytics_id='UA-174268200-1', anonymous_ip=True,
+                               do_not_track=not config.extras.allow_analytics)
+
+plex = plex_connector.PlexConnector(url=config.plex.url, token=config.plex.token,
+                                    server_name=config.plex.server_name,
+                                    library_list=config.plex.libraries, tautulli_url=config.tautulli.url,
+                                    tautulli_key=config.tautulli.api_key, analytics=analytics,
                                     database=PlexContentDatabase("content.db"))
 
-trakt = trakt_connector.TraktConnector(username=credentials.TRAKT_USERNAME,
-                                       client_id=credentials.TRAKT_CLIENT_ID,
-                                       client_secret=credentials.TRAKT_CLIENT_SECRET, analytics=analytics)
-trakt.store_public_lists(lists_dict=credentials.TRAKT_LISTS)
+trakt = trakt_connector.TraktConnector(username=config.trakt.username,
+                                       client_id=config.trakt.client_id,
+                                       client_secret=config.trakt.client_secret, analytics=analytics)
+trakt.store_public_lists(lists_dict=config.trakt.lists)
 
 emoji_numbers = [u"1\u20e3", u"2\u20e3", u"3\u20e3", u"4\u20e3", u"5\u20e3"]
 
@@ -94,14 +95,14 @@ def make_recommendation(media_type: str, unwatched: bool = False, plex_username:
 class PlexRecs(commands.Cog):
 
     async def user_response(self, ctx, media_type: str, media_item: Content):
-        if str(ctx.message.author.id) == str(credentials.OWNER_DISCORD_ID):
+        if str(ctx.message.author.id) == str(config.discord.owner_id):
             response, number_of_players = plex.get_available_players(media_type=media_type)
             if response:
                 ask_about_player = True
                 while ask_about_player:
                     def check(react, react_user, num_players):
                         return str(react.emoji) in emoji_numbers[:number_of_players] \
-                               and react_user.id == credentials.OWNER_DISCORD_ID
+                               and react_user.id == config.discord.owner_id
 
                     player_question = await ctx.send(response)
                     try:
