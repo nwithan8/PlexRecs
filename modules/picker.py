@@ -17,7 +17,8 @@ def _rating_is_correct(imdb_item, rating: float, above: bool = True):
     return True
 
 
-def pick_with_rating(plex_connector: PlexConnector, media_type: str, rating: float, above: bool = True, attempts: int = 10):
+def pick_with_rating(plex_connector: PlexConnector, media_type: str, rating: float, above: bool = True,
+                     attempts: int = 10):
     attempt_counter = 0
     while attempt_counter < attempts:
         choice = plex_connector.get_random_media_item(media_type=media_type)

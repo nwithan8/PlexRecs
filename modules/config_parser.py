@@ -75,7 +75,8 @@ class PlexConfig(ConfigSection):
 
     @property
     def _movies_libraries(self) -> List[str]:
-        data = self._libraries_section._get_value(key="Movies", default=[], env_name_override="PR_PLEX_MOVIES_LIBRARIES")
+        data = self._libraries_section._get_value(key="Movies", default=[],
+                                                  env_name_override="PR_PLEX_MOVIES_LIBRARIES")
         if isinstance(data, str):
             return data.split(",")  # Dealing with a comma separated list in an environment variable
         return data

@@ -53,7 +53,8 @@ class TraktConnector:
         try:
             return User(username)
         except Exception as e:
-            self._error_and_analytics(error_message=f"Error in get_trakt_user: {e}", function_name=inspect.currentframe().f_code.co_name)
+            self._error_and_analytics(error_message=f"Error in get_trakt_user: {e}",
+                                      function_name=inspect.currentframe().f_code.co_name)
         return None
 
     def get_username_by_listname(self, list_name):

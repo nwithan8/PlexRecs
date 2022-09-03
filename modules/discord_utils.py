@@ -1,22 +1,23 @@
 import discord
 from discord.ext import commands, tasks
 
-import credentials
 import modules.imdb_connector as imdb
-from modules import plex_connector
+from modules import plex_connector, config_parser
 from modules.analytics import GoogleAnalytics
 from modules.library_database import Content
 from modules.plex_connector import PlexConnector
+
+config = config_parser.Config(app_name="PlexRecs", config_path="config.yaml")
 
 
 def make_embed(plex: PlexConnector, media_item: Content, analytics: GoogleAnalytics):
     imdb_item = imdb.get_imdb_item(media_item.Title, analytics=analytics)
     embed = None
-    if credentials.RETURN_PLEX_URL:
+    if config.plex.use_plex_link:
         url = f"https://app.plex.tv/desktop#!/server/{plex.server_id}/details?key=%2Flibrary%2Fmetadata%2F{media_item.RatingKey}"
         embed = discord.Embed(title=media_item.Title,
                               url=url,
-                              description=f"Watch it on {credentials.PLEX_SERVER_NAME}")
+                              description=f"Watch it on {config.plex.server_name}")
         embed.add_field(name="\u200b", value=f"[Click here to watch on Plex]({url})")
     else:
         url = f"https://www.imdb.com/title/{imdb_item.imdb_id}"
