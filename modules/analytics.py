@@ -32,7 +32,10 @@ def _make_url(params_dict):
 
 
 class GoogleAnalytics:
-    def __init__(self, analytics_id: str, anonymous_ip: bool = False, do_not_track: bool = False):
+    def __init__(self,
+                 analytics_id: str,
+                 anonymous_ip: bool = False,
+                 do_not_track: bool = False):
         self.analytics_id = analytics_id
         self.version = '1'
         self.anonymize_ip = anonymous_ip
@@ -46,9 +49,14 @@ class GoogleAnalytics:
             return True
         return False
 
-    def event(self, event_category: str, event_action: str,
-              event_label: str = None, event_value: int = None, user_id: str = None,
-              anonymize_ip: bool = False, random_uuid_if_needed: bool = False):
+    def event(self,
+              event_category: str,
+              event_action: str,
+              event_label: str = None,
+              event_value: int = None,
+              user_id: str = None,
+              anonymize_ip: bool = False,
+              random_uuid_if_needed: bool = False):
         if self.do_not_track:
             return True
         if not user_id:
@@ -64,9 +72,12 @@ class GoogleAnalytics:
             final_params['ev'] = event_value
         return self._send(final_params=final_params)
 
-    def pageview(self, visited_page: str,
-                 page_title: str = None, user_id: str = None,
-                 anonymize_ip: bool = False, random_uuid_if_needed: bool = False):
+    def pageview(self,
+                 visited_page: str,
+                 page_title: str = None,
+                 user_id: str = None,
+                 anonymize_ip: bool = False,
+                 random_uuid_if_needed: bool = False):
         if self.do_not_track:
             return True
         if not user_id:

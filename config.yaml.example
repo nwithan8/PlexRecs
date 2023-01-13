@@ -30,17 +30,18 @@ Discord:
   BotPrefix: "?"
   OwnerID: ""  # Right-click on your profile picture -> "Copy ID"
 
-Trakt:
-  # Make a Trakt application: https://trakt.tv/oauth/applications
-  Username: ""
-  ClientID: ""
-  ClientSecret: ""
-  Lists:
-    # Indicate the Trakt username and the list name for each public list you want to possibly use.
-    # NOTE: Only public lists work
-    - username/listname
-    - username/listname
-    - username/listname
+RecServices:
+    Trakt:
+      # Make a Trakt application: https://trakt.tv/oauth/applications
+      Username: ""
+      ClientID: ""
+      ClientSecret: ""
+      Lists:
+        # Indicate the Trakt username and the list name for each public list you want to possibly use.
+        # NOTE: Only public lists work
+        - username/listname
+        - username/listname
+        - username/listname
 
 Extras:
   Analytics: true  # See README.md for details

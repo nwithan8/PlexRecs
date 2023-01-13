@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Any
 
 from sqlalchemy import VARCHAR, Column, Integer, String, BigInteger, Boolean, func
 from sqlalchemy.ext.declarative import declarative_base
@@ -15,7 +15,8 @@ class ExternalIDs(Base):
     ExternalID = Column(VARCHAR(500), nullable=False)
 
     @db.none_as_null
-    def __init__(self, content_id: int = None, external_id: str = None, **kwargs):
+    def __init__(self, content_id: int = None, external_id: str = None, *args: Any, **kwargs):
+        super().__init__(*args, **kwargs)
         self.ContentID = content_id or kwargs.get('ContentID')
         self.ExternalID = external_id or kwargs.get('ExternalID')
 
@@ -32,7 +33,8 @@ class Content(Base):
 
     @db.none_as_null
     def __init__(self, title: str = None, year: int = None, rating_key: int = None, library_section_id: int = None,
-                 media_type: str = None, on_plex: bool = None, **kwargs):
+                 media_type: str = None, on_plex: bool = None, *args: Any, **kwargs):
+        super().__init__(*args, **kwargs)
         self.Title = title or kwargs.get('Title')
         self.Year = year or kwargs.get('Year')
         self.RatingKey = rating_key or kwargs.get('RatingKey')
@@ -48,7 +50,8 @@ class Libraries(Base):
     Name = Column(String(500))
 
     @db.none_as_null
-    def __init__(self, name: str = None, plex_id: int = None, **kwargs):
+    def __init__(self, name: str = None, plex_id: int = None, *args: Any, **kwargs):
+        super().__init__(*args, **kwargs)
         self.Name = name or kwargs.get('Name')
         self.PlexID = plex_id or kwargs.get('PlexID')
 
@@ -183,7 +186,7 @@ class PlexContentDatabase(db.SQLAlchemyDatabase):
             .filter(ExternalIDs.ContentID == content_id).delete()
         self.commit()
 
-    def get_random_contents_for_library(self, library_section_id: int, count: int = 1):
+    def get_random_contents_for_library(self, library_section_id: int, count: int = 1) -> List[Content]:
         """
         Get random content for a library section
 
@@ -194,7 +197,7 @@ class PlexContentDatabase(db.SQLAlchemyDatabase):
         return self.session.query(Content). \
             filter_by(LibraryID=library_section_id).order_by(func.random()).limit(count).all()
 
-    def get_random_contents_of_type(self, media_type: str, count: int = 1):
+    def get_random_contents_of_type(self, media_type: str, count: int = 1) -> List[Content]:
         """
         Get random content of a given type
 

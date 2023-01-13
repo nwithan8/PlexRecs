@@ -1,0 +1,4 @@
+GOOGLE_ANALYTICS_ID = "UA-174268200-1"
+APP_NAME = "PlexRecs"
+CONFIG_FILE_NAME = "config.yaml"
+DATABASE_FILE_NAME = "content.db"

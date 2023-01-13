@@ -1,0 +1,6 @@
+APP_NAME = "PlexRecs"
+GOOGLE_ANALYTICS_ID = 'UA-174268200-2'  # TODO: Change this
+DEFAULT_CONFIG_PATH = "/config/config.yaml"
+DEFAULT_LOG_DIR = "/logs/"
+CONSOLE_LOG_LEVEL = "INFO"
+FILE_LOG_LEVEL = "DEBUG"

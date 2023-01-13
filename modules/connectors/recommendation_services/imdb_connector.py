@@ -1,11 +1,12 @@
 import imdb
 
+from modules.analytics import GoogleAnalytics
 from modules.logs import *
 
 im = imdb.IMDb()
 
 
-def get_imdb_item(title, analytics):
+def get_imdb_item(title: str, analytics: GoogleAnalytics):
     try:
         search_results = im.search_for_title(title)
         if search_results:

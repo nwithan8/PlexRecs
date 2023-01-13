@@ -70,6 +70,11 @@ class PlexConfig(ConfigSection):
         return self._get_value(key="UsePlexLink", default=True, env_name_override="PR_USE_PLEX_LINK")
 
     @property
+    def library_update_interval_minutes(self) -> int:
+        return self._get_value(key="LibraryUpdateIntervalMinutes", default=True,
+                               env_name_override="PR_LIBRARY_UPDATE_INTERVAL_MINUTES")
+
+    @property
     def _libraries_section(self):
         return self._get_subsection(key="Libraries")
 
@@ -130,7 +135,7 @@ class TautulliConfig(ConfigSection):
 
     @property
     def api_key(self) -> str:
-        return self._get_value(key="APIKey", env_name_override="PR_TAUTULLI_KEY")
+        return self._get_value(key="ApiKey", env_name_override="PR_TAUTULLI_KEY")
 
     @property
     def url(self) -> str:
@@ -152,7 +157,6 @@ class DiscordConfig(ConfigSection):
     @property
     def owner_id(self) -> str:
         return self._get_value(key="OwnerID", env_name_override="PR_DISCORD_OWNER_ID")
-
 
 class TraktConfig(ConfigSection):
     def __init__(self, data, pull_from_env: bool = True):
@@ -194,6 +198,14 @@ class TraktConfig(ConfigSection):
         """
         return lists
 
+class RecommendationServicesConfig(ConfigSection):
+    def __init__(self, data, pull_from_env: bool = True):
+        super().__init__(section_key="RecServices", data=data, pull_from_env=pull_from_env)
+
+    @property
+    def trakt(self) -> TraktConfig:
+        return self._get_subsection(key="Trakt")
+
 
 class ExtrasConfig(ConfigSection):
     def __init__(self, data, pull_from_env: bool = True):
@@ -227,7 +239,7 @@ class Config:
         self.plex = PlexConfig(data=self.config, pull_from_env=self.pull_from_env)
         self.tautulli = TautulliConfig(self.config, self.pull_from_env)
         self.discord = DiscordConfig(self.config, self.pull_from_env)
-        self.trakt = TraktConfig(self.config, self.pull_from_env)
+        self.recommendation_services = RecommendationServicesConfig(self.config, self.pull_from_env)
         self.extras = ExtrasConfig(self.config, self.pull_from_env)
         try:
             self.log_level = self.config['logLevel'].get() or "INFO"

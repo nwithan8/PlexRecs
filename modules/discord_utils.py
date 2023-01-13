@@ -1,11 +1,10 @@
 import discord
-from discord.ext import commands, tasks
 
-import modules.imdb_connector as imdb
-from modules import plex_connector, config_parser
+import modules.connectors.recommendation_services.imdb_connector as imdb
+from modules import config_parser
 from modules.analytics import GoogleAnalytics
 from modules.library_database import Content
-from modules.plex_connector import PlexConnector
+from modules.connectors.plex_connector import PlexConnector
 
 config = config_parser.Config(app_name="PlexRecs", config_path="config.yaml")
 

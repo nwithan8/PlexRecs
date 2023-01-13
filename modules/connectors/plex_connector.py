@@ -1,14 +1,15 @@
-from typing import List
+from typing import List, Union
 
+import discord
 from plexapi.library import LibrarySection
-from plexapi.media import Guid
 from plexapi.server import PlexServer
 from progress.bar import Bar
 
-import modules.tautulli_connector as tautulli
+import modules.connectors.tautulli_connector as tautulli
+import modules.logs as logging
 from modules.analytics import GoogleAnalytics
+from modules.config_parser import PlexConfig
 from modules.library_database import PlexContentDatabase, Content
-from modules.logs import *
 
 
 def get_possible_matching_items(library_section, title, year, external_ids: List[str] = None) -> List:
@@ -36,6 +37,10 @@ def _build_filters(library_section: LibrarySection, **kwargs):
         if k in available_filters and v:
             final_filters[k] = v
     return final_filters
+
+
+def valid_reaction(reaction: discord.Reaction, user: discord.User, on_message: discord.Message = None, ) -> bool:
+    return reaction.message.author == user and reaction.message.channel == user.dm_channel
 
 
 def _contains_keywords(item, keywords: list) -> bool:
@@ -91,46 +96,49 @@ class SmallMediaItem:
 
 
 class PlexConnector:
-    def __init__(self, url: str, token: str, server_name: str, library_list: dict, tautulli_url: str, tautulli_key: str,
-                 analytics: GoogleAnalytics, database: PlexContentDatabase):
+
+    _analytics: GoogleAnalytics
+
+    def __init__(self,
+                 config: PlexConfig,
+                 analytics: GoogleAnalytics):
+        self._analytics = analytics
+
         self.name = server_name
         self.server = PlexServer(baseurl=url, token=token)
-        self.analytics = analytics
-        info("Connected to Plex.")
         self.library_config = library_list
-        self.tautulli = tautulli.TautulliConnector(url=tautulli_url, api_key=tautulli_key,
+        self.tautulli = tautulli.TautulliConnector(url=tautulli_url,
+                                                   api_key=tautulli_key,
                                                    analytics=analytics)
-        info("Connected to Tautulli.")
         self.database = database
-        info("Connected to database.")
-        self.initialize_libraries()
         self.owner_players = []
 
-    def get_section_ids_for_media_type(self, media_type: str):
+    def get_section_ids_for_media_type(self, media_type: str) -> List[int]:
         if media_type not in self.library_config.keys():
             return []
         return self.library_config[media_type]
 
     def _error_and_analytics(self, error_message: str, function_name: str):
-        error(message=error_message)
-        self.analytics.event(event_category="Error", event_action=function_name, random_uuid_if_needed=True)
+        logging.error(message=error_message)
+        self._analytics.event(event_category="Error", event_action=function_name, random_uuid_if_needed=True)
 
-    def initialize_libraries(self):
+    def initialize_libraries(self) -> None:
         for name, numbers in self.library_config.items():
-            for number in numbers:
-                self.database.add_library(name=name, plex_id=number)
-                info(f"Added library {name} with number {number} to database.")
+            if numbers:
+                for number in numbers:
+                    self.database.add_library(name=name, plex_id=number)
+                    logging.info(f"Added library {name} with number {number} to database.")
 
-    def get_random_media_item(self, library_id: int = None, media_type: str = None):
+    def get_random_media_item(self, library_id: int = None, media_type: str = None) -> Content:
         if library_id:
             return self.database.get_random_contents_for_library(library_section_id=library_id)[0]
         else:
             return self.database.get_random_contents_of_type(media_type=media_type)[0]
 
-    def clean_libraries(self):
+    def clean_libraries(self) -> None:
         self.database.purge()
 
-    def _populate_library(self, library_name: str):
+    async def _populate_library(self, library_name: str):
         if library_name not in self.library_config.keys():
             return
         for library_number in self.library_config[library_name]:
@@ -159,12 +167,12 @@ class PlexConnector:
                 bar.next()
             bar.finish()
 
-    def populate_libraries(self):
+    async def populate_libraries(self):
         self.clean_libraries()
         for group_name in self.library_config.keys():
-            self._populate_library(library_name=group_name)
+            await self._populate_library(library_name=group_name)
 
-    def get_user_history(self, username, section_ids):
+    def get_user_history(self, username: str, section_ids: List[int]) -> Union[List[str], None]:
         return self.tautulli.get_user_history(username=username, section_ids=section_ids)
 
     def get_available_players(self, media_type):

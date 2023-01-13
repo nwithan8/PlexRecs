@@ -1,10 +1,17 @@
 import random
-from typing import List
+from typing import Union
 
-import modules.imdb_connector as imdb
+import modules.connectors.recommendation_services.imdb_connector as imdb
+from modules.library_database import Content
 from modules.logs import *
-from modules.plex_connector import PlexConnector
-from modules.trakt_connector import TraktConnector
+from modules.connectors.plex_connector import PlexConnector
+from modules.connectors.recommendation_services.trakt_connector import TraktConnector
+
+
+class PickerFailureReason:
+    TO0_MANY_ATTEMPTS = 1
+    PARAMETER_ERROR = 2
+    UNKNOWN_ACTION = 3
 
 
 def _rating_is_correct(imdb_item, rating: float, above: bool = True):
@@ -17,8 +24,11 @@ def _rating_is_correct(imdb_item, rating: float, above: bool = True):
     return True
 
 
-def pick_with_rating(plex_connector: PlexConnector, media_type: str, rating: float, above: bool = True,
-                     attempts: int = 10):
+def pick_with_rating(plex_connector: PlexConnector,
+                     media_type: str,
+                     rating: float,
+                     above: bool = True,
+                     attempts: int = 10) -> Content | int:
     attempt_counter = 0
     while attempt_counter < attempts:
         choice = plex_connector.get_random_media_item(media_type=media_type)
@@ -26,33 +36,39 @@ def pick_with_rating(plex_connector: PlexConnector, media_type: str, rating: flo
         if _rating_is_correct(imdb_item=imdb_item, rating=rating, above=above):
             return choice
         attempt_counter += 1
-    return "Too many attempts"
+    return PickerFailureReason.TO0_MANY_ATTEMPTS
 
 
-def pick_unwatched(plex_connector: PlexConnector, username: str, media_type: str, attempts: int = 10):
+def pick_unwatched(plex_connector: PlexConnector,
+                   username: str,
+                   media_type: str,
+                   attempts: int = 10) -> Union[Content, int]:
     """
     Keep picking until something is unwatched
     :param media_type:
     :param username:
     :param plex_connector:
-    :return: SmallMediaItem object
+    :param attempts:
+    :return: Content object
     """
     history = plex_connector.get_user_history(username=username,
                                               section_ids=plex_connector.get_section_ids_for_media_type(media_type))
-    if history == "Error":
-        return False
+    if not history:
+        return PickerFailureReason.PARAMETER_ERROR
 
     attempt_counter = 0
     while attempt_counter < attempts:  # give up after ten failures
-        choice = plex_connector.get_random_media_item(media_type=media_type)
+        choice: Content = plex_connector.get_random_media_item(media_type=media_type)
         if choice.Title not in history:
             return choice
         attempt_counter += 1
-    return "Too many attempts"
+    return PickerFailureReason.TO0_MANY_ATTEMPTS
 
 
-def pick_from_trakt_list(trakt_connector: TraktConnector, trakt_list_name: str, plex_connector: PlexConnector,
-                         attempts: int = 5):
+def pick_from_trakt_list(trakt_connector: TraktConnector,
+                         trakt_list_name: str,
+                         plex_connector: PlexConnector,
+                         attempts: int = 5) -> Union[Content, int]:
     trakt_list = trakt_connector.get_list_items(list_name=trakt_list_name)
     attempt_counter = 0
     while attempt_counter < attempts:  # give up after five failures
@@ -66,8 +82,8 @@ def pick_from_trakt_list(trakt_connector: TraktConnector, trakt_list_name: str, 
             return plex_equivalent
         info(f"Couldn't find {trakt_choice.title} on Plex. Trying a different item...")
         attempt_counter += 1
-    return "Too many attempts"
+    return PickerFailureReason.TO0_MANY_ATTEMPTS
 
 
-def pick_random(plex_connector: PlexConnector, media_type: str):
+def pick_random(plex_connector: PlexConnector, media_type: str) -> Content:
     return plex_connector.get_random_media_item(media_type=media_type)

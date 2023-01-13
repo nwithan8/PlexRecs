@@ -11,3 +11,12 @@ def convert_to_bool(bool_string: str):
     elif bool_string.lower() in ['true', 'yes', 'on', 'enable']:
         return True
     return None
+
+
+def add_a_or_an(string: str) -> str:
+    """
+    Add a or an to a string
+    """
+    if string[0].lower() in ['a', 'e', 'i', 'o', 'u']:
+        return f'an {string}'
+    return f'a {string}'

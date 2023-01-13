@@ -1,35 +1,54 @@
-import discord
-from discord.ext import commands
+import argparse
+import asyncio
+import sys
 
-from modules import config_parser
-from modules.logs import *
+import modules.logs as logging
+from bot import PlexRecs
+from consts import (
+    GOOGLE_ANALYTICS_ID,
+    APP_NAME,
+    DEFAULT_CONFIG_PATH,
+    DEFAULT_LOG_DIR,
+    CONSOLE_LOG_LEVEL,
+    FILE_LOG_LEVEL,
+)
+from modules.analytics import GoogleAnalytics
+from modules.config_parser import Config
 
-config = config_parser.Config(app_name="PlexRecs", config_path="config.yaml")
+# Parse arguments
+parser = argparse.ArgumentParser(description="PlexRecs - Plex recommendations bot for Discord")
 
-logging.basicConfig(format='%(levelname)s:%(message)s',
-                    level=logging.getLevelName(config.log_level))
+"""
+Bot will use config, in order:
+1. Explicit config file path provided as CLI argument, if included, or
+2. Default config file path, if exists, or
+3. Environmental variables
+"""
+parser.add_argument("-c", "--config", help="Path to config file", default=DEFAULT_CONFIG_PATH)
 
-bot = commands.Bot(command_prefix=config.discord.command_prefix, intents=discord.Intents.default())
+# Should include trailing backslash
+parser.add_argument("-l", "--log", help="Log file directory", default=DEFAULT_LOG_DIR)
 
-formatter = commands.HelpCommand(show_check_failure=False)
+args = parser.parse_args()
 
-info("Starting application...")
+# Set up logging
+logging.init(app_name=APP_NAME, console_log_level=CONSOLE_LOG_LEVEL, log_to_file=True, log_file_dir=args.log, file_log_level=FILE_LOG_LEVEL)
 
-exts = [
-    "PlexRecs"
-]
-for ext in exts:
-    bot.load_extension(ext)
+# Set up configuration
+config = Config(app_name=APP_NAME, config_path=f"{args.config}")
 
-
-@bot.event
-async def on_ready():
-    info(f'\n\nLogged in as : {bot.user.name} - {bot.user.id}\nVersion: {discord.__version__}\n')
-    await bot.change_presence(status=discord.Status.idle,
-                              activity=discord.Game(name=f'in the REC league | {config.discord.bot_prefix}'))
-    info(f'Successfully logged in and booted...!\n')
-
+# Set up analytics
+analytics = GoogleAnalytics(analytics_id=GOOGLE_ANALYTICS_ID,
+                            anonymous_ip=True,
+                            do_not_track=not config.extras.allow_analytics)
 
 if __name__ == '__main__':
-    info("Connecting to Discord...")
-    bot.run(config.discord.bot_token)
+    logging.info("Starting PlexRecs...")
+    analytics.event(event_category="Platform",
+                    event_action=sys.platform)
+
+    # Set up PlexRecs bot
+    bot = PlexRecs(config=config, analytics=analytics)
+
+    # Run bot
+    asyncio.run(bot.run())
